@@ -2,104 +2,225 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
+/* ToolA design system — exact port from prototype.
+   All colors HSL. */
 
 @layer base {
   :root {
     --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --foreground: 215 18% 9%;
+
+    --bg-2: 220 10% 97%;
+    --bg-3: 220 8% 93%;
+    --border-strong: 220 7% 80%;
+    --text-2: 218 9% 32%;
+    --text-3: 220 6% 57%;
 
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 215 18% 9%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover-foreground: 215 18% 9%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    /* ToolA green */
+    --primary: 152 78% 27%;
+    --primary-foreground: 0 0% 100%;
+    --primary-2: 153 80% 22%;
+    --primary-bg: 145 39% 92%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 220 10% 97%;
+    --secondary-foreground: 215 18% 9%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 220 10% 97%;
+    --muted-foreground: 220 6% 57%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --accent: 145 39% 92%;
+    --accent-foreground: 152 78% 27%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 4 71% 45%;
+    --destructive-foreground: 0 0% 100%;
+    --destructive-bg: 6 86% 95%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --warn: 39 100% 32%;
+    --warn-foreground: 0 0% 100%;
+    --warn-bg: 43 86% 90%;
 
-    --radius: 0.5rem;
+    --border: 220 8% 90%;
+    --input: 220 8% 90%;
+    --ring: 152 78% 27%;
 
-    --sidebar-background: 0 0% 98%;
+    --radius: 0.625rem;
 
-    --sidebar-foreground: 240 5.3% 26.1%;
-
-    --sidebar-primary: 240 5.9% 10%;
-
-    --sidebar-primary-foreground: 0 0% 98%;
-
-    --sidebar-accent: 240 4.8% 95.9%;
-
-    --sidebar-accent-foreground: 240 5.9% 10%;
-
-    --sidebar-border: 220 13% 91%;
-
-    --sidebar-ring: 217.2 91.2% 59.8%;
-  }
-
-  .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --shell-bg: 220 8% 86%;
   }
 }
 
 @layer base {
-  * {
-    @apply border-border;
+  * { @apply border-border; }
+  html, body, #root { height: 100%; overflow: hidden; overscroll-behavior: none; }
+  body {
+    background: hsl(var(--shell-bg));
+    color: hsl(var(--foreground));
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    user-select: none;
+    font-size: 16px;
+    line-height: 1.5;
+  }
+  button, a { -webkit-tap-highlight-color: transparent; }
+}
+
+@layer components {
+  /* Phone shell */
+  .device {
+    max-width: 480px;
+    height: 100vh;
+    height: 100dvh;
+    margin: 0 auto;
+    background: hsl(var(--background));
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    overflow: hidden;
+  }
+  @media (min-width: 640px) {
+    .device {
+      max-width: 440px;
+      margin: 20px auto;
+      height: calc(100dvh - 40px);
+      box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+    }
   }
 
-  body {
-    @apply bg-background text-foreground;
+  .scroll-area {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+  }
+  .scroll-area::-webkit-scrollbar { width: 0; }
+
+  /* Status pill */
+  .status-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 10px;
+    background: hsl(var(--primary-bg));
+    color: hsl(var(--primary));
+    font-size: 12px; font-weight: 600;
+    border-radius: 100px;
+    border: none; font-family: inherit; cursor: pointer;
+  }
+  .status-pill::before {
+    content: ''; width: 6px; height: 6px; border-radius: 50%;
+    background: hsl(var(--primary));
+  }
+  .status-pill.offline { background: hsl(var(--warn-bg)); color: hsl(var(--warn)); }
+  .status-pill.offline::before { background: hsl(var(--warn)); }
+
+  /* Section */
+  .section { padding: 16px 20px; border-bottom: 1px solid hsl(var(--border)); }
+  .section-title {
+    font-size: 13px; font-weight: 600; color: hsl(var(--text-3));
+    text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;
+  }
+  .section-sub { font-size: 12px; color: hsl(var(--text-3)); margin-bottom: 12px; }
+
+  /* Machine status badges */
+  .ms-badge {
+    font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 6px;
+    letter-spacing: 0.02em; text-transform: uppercase; white-space: nowrap;
+  }
+  .ms-badge.ok { background: hsl(var(--primary-bg)); color: hsl(var(--primary)); }
+  .ms-badge.busy { background: hsl(var(--warn-bg)); color: hsl(var(--warn)); }
+  .ms-badge.fault { background: hsl(var(--destructive-bg)); color: hsl(var(--destructive)); }
+  .ms-badge.service { background: hsl(var(--bg-3)); color: hsl(var(--text-2)); }
+
+  .job-badge {
+    font-size: 11px; font-weight: 700; padding: 4px 9px; border-radius: 6px;
+    letter-spacing: 0.02em; white-space: nowrap; text-transform: uppercase;
+  }
+  .job-badge.urgent { background: hsl(var(--destructive-bg)); color: hsl(var(--destructive)); }
+  .job-badge.active { background: hsl(var(--warn-bg)); color: hsl(var(--warn)); }
+  .job-badge.scheduled { background: hsl(var(--primary-bg)); color: hsl(var(--primary)); }
+
+  /* Risk card */
+  .risk-card {
+    padding: 12px 14px; background: hsl(var(--bg-2)); border-radius: 10px; margin-bottom: 10px;
+  }
+  .risk-icon {
+    width: 32px; height: 32px; border-radius: 50%;
+    background: hsl(var(--primary-bg)); color: hsl(var(--primary));
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .risk-icon.warn { background: hsl(var(--warn-bg)); color: hsl(var(--warn)); }
+
+  /* Quick-ask CTA */
+  .quick-ask {
+    margin: 16px 20px; padding: 16px; background: hsl(var(--primary)); color: white;
+    border-radius: 14px; display: flex; align-items: center; gap: 14px;
+    border: none; width: calc(100% - 40px); text-align: left; font-family: inherit; cursor: pointer;
+  }
+  .quick-ask:active { background: hsl(var(--primary-2)); }
+
+  /* Tab bar (bottom) */
+  .tabbar {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    background: hsl(var(--background)); border-top: 1px solid hsl(var(--border));
+    flex-shrink: 0; padding-bottom: env(safe-area-inset-bottom);
+  }
+  .tab-btn {
+    padding: 10px 4px 12px; background: transparent; border: none;
+    color: hsl(var(--text-3)); cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; gap: 5px;
+    font-size: 11px; font-weight: 500; font-family: inherit;
+    transition: color 0.15s; position: relative;
+  }
+  .tab-btn.active { color: hsl(var(--primary)); font-weight: 700; }
+  .tab-btn.active::before {
+    content: ''; position: absolute; top: 0; left: 50%;
+    transform: translateX(-50%); width: 28px; height: 3px;
+    background: hsl(var(--primary)); border-radius: 0 0 3px 3px;
+  }
+
+  /* Home tabs (Islerim/Bolgem) */
+  .home-tab {
+    flex: 1; padding: 16px 12px; background: transparent; border: none;
+    color: hsl(var(--text-3)); font-size: 17px; font-weight: 700;
+    letter-spacing: -0.01em; cursor: pointer; font-family: inherit;
+    position: relative; display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .home-tab.active { color: hsl(var(--foreground)); }
+  .home-tab.active::after {
+    content: ''; position: absolute; bottom: -1px; left: 15%; right: 15%;
+    height: 3px; background: hsl(var(--primary)); border-radius: 3px 3px 0 0;
+  }
+  .home-tab-count {
+    font-size: 13px; padding: 2px 9px; border-radius: 100px;
+    background: hsl(var(--bg-3)); color: hsl(var(--text-3)); font-weight: 700;
+  }
+  .home-tab.active .home-tab-count { background: hsl(var(--primary-bg)); color: hsl(var(--primary)); }
+
+  /* Region chips */
+  .region-chip {
+    padding: 7px 12px; background: hsl(var(--background));
+    border: 1px solid hsl(var(--border)); color: hsl(var(--text-2));
+    font-size: 13px; font-weight: 500; border-radius: 100px;
+    cursor: pointer; font-family: inherit; white-space: nowrap; flex-shrink: 0;
+  }
+  .region-chip.active { background: hsl(var(--foreground)); border-color: hsl(var(--foreground)); color: white; }
+  .region-chip.warn.active { background: hsl(var(--warn)); border-color: hsl(var(--warn)); }
+  .region-chip.danger.active { background: hsl(var(--destructive)); border-color: hsl(var(--destructive)); }
+
+  /* Buttons */
+  .btn-primary {
+    background: hsl(var(--primary)); color: white;
+    padding: 14px 18px; border-radius: 10px; border: none;
+    font-weight: 600; font-size: 15px; font-family: inherit; cursor: pointer;
+  }
+  .btn-primary:active { background: hsl(var(--primary-2)); }
+  .btn-secondary {
+    background: hsl(var(--bg-2)); color: hsl(var(--foreground));
+    padding: 14px 18px; border-radius: 10px; border: 1px solid hsl(var(--border));
+    font-weight: 600; font-size: 15px; font-family: inherit; cursor: pointer;
   }
 }
