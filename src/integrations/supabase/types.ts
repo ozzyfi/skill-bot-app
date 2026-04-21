@@ -14,7 +14,242 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      corrections: {
+        Row: {
+          bolge: Database["public"]["Enums"]["region_t"]
+          correct: string
+          created_at: string
+          created_by: string | null
+          id: string
+          lesson: string
+          scene: string
+          usta: string
+          wrong: string
+        }
+        Insert: {
+          bolge: Database["public"]["Enums"]["region_t"]
+          correct: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          lesson: string
+          scene: string
+          usta: string
+          wrong: string
+        }
+        Update: {
+          bolge?: Database["public"]["Enums"]["region_t"]
+          correct?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          lesson?: string
+          scene?: string
+          usta?: string
+          wrong?: string
+        }
+        Relationships: []
+      }
+      learning_cases: {
+        Row: {
+          alarm: string
+          bolge: Database["public"]["Enums"]["region_t"]
+          created_at: string
+          created_by: string | null
+          diagnosis: string
+          id: string
+          month: string
+          success: boolean
+          usta: string
+        }
+        Insert: {
+          alarm: string
+          bolge: Database["public"]["Enums"]["region_t"]
+          created_at?: string
+          created_by?: string | null
+          diagnosis: string
+          id?: string
+          month: string
+          success?: boolean
+          usta: string
+        }
+        Update: {
+          alarm?: string
+          bolge?: Database["public"]["Enums"]["region_t"]
+          created_at?: string
+          created_by?: string | null
+          diagnosis?: string
+          id?: string
+          month?: string
+          success?: boolean
+          usta?: string
+        }
+        Relationships: []
+      }
+      machines: {
+        Row: {
+          alert_text: string | null
+          city: string
+          code: string
+          created_at: string
+          district: string
+          id: string
+          last_service: string | null
+          model: string
+          name: string
+          next_maintenance: string | null
+          operating_hours: number
+          region: Database["public"]["Enums"]["region_t"]
+          serial_no: string | null
+          status: string
+          year: number | null
+        }
+        Insert: {
+          alert_text?: string | null
+          city: string
+          code: string
+          created_at?: string
+          district: string
+          id?: string
+          last_service?: string | null
+          model: string
+          name: string
+          next_maintenance?: string | null
+          operating_hours?: number
+          region: Database["public"]["Enums"]["region_t"]
+          serial_no?: string | null
+          status?: string
+          year?: number | null
+        }
+        Update: {
+          alert_text?: string | null
+          city?: string
+          code?: string
+          created_at?: string
+          district?: string
+          id?: string
+          last_service?: string | null
+          model?: string
+          name?: string
+          next_maintenance?: string | null
+          operating_hours?: number
+          region?: Database["public"]["Enums"]["region_t"]
+          serial_no?: string | null
+          status?: string
+          year?: number | null
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          client: string
+          created_at: string
+          full_name: string
+          id: string
+          region: Database["public"]["Enums"]["region_t"]
+        }
+        Insert: {
+          client?: string
+          created_at?: string
+          full_name: string
+          id: string
+          region?: Database["public"]["Enums"]["region_t"]
+        }
+        Update: {
+          client?: string
+          created_at?: string
+          full_name?: string
+          id?: string
+          region?: Database["public"]["Enums"]["region_t"]
+        }
+        Relationships: []
+      }
+      technicians: {
+        Row: {
+          city: string
+          created_at: string
+          experience_years: number
+          full_name: string
+          id: string
+          region: Database["public"]["Enums"]["region_t"]
+          specialty: string | null
+        }
+        Insert: {
+          city: string
+          created_at?: string
+          experience_years: number
+          full_name: string
+          id?: string
+          region: Database["public"]["Enums"]["region_t"]
+          specialty?: string | null
+        }
+        Update: {
+          city?: string
+          created_at?: string
+          experience_years?: number
+          full_name?: string
+          id?: string
+          region?: Database["public"]["Enums"]["region_t"]
+          specialty?: string | null
+        }
+        Relationships: []
+      }
+      work_orders: {
+        Row: {
+          alarm_code: string | null
+          assignee_id: string | null
+          badge: string
+          closed_at: string | null
+          closing_notes: string | null
+          code: string
+          complaint: string
+          created_at: string
+          description: string | null
+          id: string
+          machine_id: string
+          parts: Json
+          status: string
+        }
+        Insert: {
+          alarm_code?: string | null
+          assignee_id?: string | null
+          badge?: string
+          closed_at?: string | null
+          closing_notes?: string | null
+          code: string
+          complaint: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          machine_id: string
+          parts?: Json
+          status?: string
+        }
+        Update: {
+          alarm_code?: string | null
+          assignee_id?: string | null
+          badge?: string
+          closed_at?: string | null
+          closing_notes?: string | null
+          code?: string
+          complaint?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          machine_id?: string
+          parts?: Json
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_orders_machine_id_fkey"
+            columns: ["machine_id"]
+            isOneToOne: false
+            referencedRelation: "machines"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -23,7 +258,7 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      region_t: "Marmara" | "Ege" | "İç Anadolu"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +385,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      region_t: ["Marmara", "Ege", "İç Anadolu"],
+    },
   },
 } as const
