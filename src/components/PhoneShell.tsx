@@ -1,6 +1,7 @@
-import { ReactNode, useState } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useNavigate, useLocation } from "react-router-dom";
+import { useSyncQueue, flushQueue } from "@/hooks/useSyncQueue";
 
 const TabIcon = ({ name }: { name: "home" | "msg" | "user" }) => {
   if (name === "home")
@@ -17,16 +18,33 @@ const TabIcon = ({ name }: { name: "home" | "msg" | "user" }) => {
 };
 
 export const PhoneShell = ({ children }: { children: ReactNode }) => {
-  const { profile, signOut } = useAuth();
+  const { profile } = useAuth();
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const [online, setOnline] = useState(true);
+  const { pending } = useSyncQueue();
+  const [online, setOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
 
-  const isActive = (p: string) => pathname === p || (p === "/" && pathname.startsWith("/machine")) || (p === "/" && pathname.startsWith("/job"));
+  // Track real network changes + simulate toggle
+  useEffect(() => {
+    const onUp = () => { setOnline(true); flushQueue(); };
+    const onDown = () => setOnline(false);
+    window.addEventListener("online", onUp);
+    window.addEventListener("offline", onDown);
+    return () => {
+      window.removeEventListener("online", onUp);
+      window.removeEventListener("offline", onDown);
+    };
+  }, []);
+
+  // Try a flush on mount in case there's pending work
+  useEffect(() => { if (online) flushQueue(); }, []); // eslint-disable-line
+
+  const isActive = (p: string) =>
+    pathname === p ||
+    (p === "/" && (pathname.startsWith("/machine") || pathname.startsWith("/job") || pathname.startsWith("/close")));
 
   return (
     <div className="device">
-      {/* Header */}
       <header className="flex justify-between items-center px-5 py-4 border-b border-border bg-background flex-shrink-0">
         <div className="flex items-center gap-2.5">
           <div className="text-[22px] font-bold tracking-tight text-primary leading-none">ToolA</div>
@@ -35,15 +53,15 @@ export const PhoneShell = ({ children }: { children: ReactNode }) => {
         <button
           className={`status-pill ${online ? "" : "offline"}`}
           onClick={() => setOnline((o) => !o)}
+          title="Bağlantı durumunu değiştir (demo)"
         >
           {online ? "Çevrimiçi" : "Çevrimdışı"}
+          {pending > 0 && <span className="ml-1 font-bold">· {pending}</span>}
         </button>
       </header>
 
-      {/* Content */}
       <main className="scroll-area">{children}</main>
 
-      {/* Tab bar */}
       <nav className="tabbar">
         <button className={`tab-btn ${isActive("/") ? "active" : ""}`} onClick={() => navigate("/")}>
           <TabIcon name="home" />
@@ -58,9 +76,7 @@ export const PhoneShell = ({ children }: { children: ReactNode }) => {
           Profil
         </button>
       </nav>
-
-      {/* invisible signOut helper accessible via profile screen later */}
-      <button hidden onClick={signOut} />
     </div>
   );
 };
+

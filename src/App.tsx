@@ -11,6 +11,8 @@ import MachineDetail from "./pages/MachineDetail";
 import Profile from "./pages/Profile";
 import Placeholder from "./pages/Placeholder";
 import Diagnosis from "./pages/Diagnosis";
+import JobDetail from "./pages/JobDetail";
+import CloseWO from "./pages/CloseWO";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -34,7 +36,8 @@ const App = () => (
             <Route path="/auth" element={<AuthPage />} />
             <Route path="/" element={<Protected><Home /></Protected>} />
             <Route path="/machine/:id" element={<Protected><MachineDetail /></Protected>} />
-            <Route path="/job/:id" element={<Protected><Placeholder title="İş Emri" note="Job detail (parça listesi, kapatma) Build 3'te geliyor." /></Protected>} />
+            <Route path="/job/:id" element={<Protected><JobDetail /></Protected>} />
+            <Route path="/close/:id" element={<Protected><CloseWO /></Protected>} />
             <Route path="/diagnosis" element={<Protected><Diagnosis /></Protected>} />
             <Route path="/profile" element={<Protected><Profile /></Protected>} />
             <Route path="*" element={<NotFound />} />
