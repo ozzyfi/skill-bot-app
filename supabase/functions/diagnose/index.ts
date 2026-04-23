@@ -1,5 +1,8 @@
-// ToolA — Diagnose edge function
-// Calls Lovable AI Gateway with usta-persona system prompt and returns structured JSON.
+// ToolA — Diagnose edge function (Sprint 4)
+// Reads usta profiles from master_profiles table (work.md + persona.md).
+// Falls back to hardcoded profiles if DB is empty.
+
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -7,87 +10,77 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-type Usta = {
-  ad: string; kidem: number; bolge: string; ekipman: string[];
-  oem: { konu: string; oem: string; saha: string; vaka: number; basari: number }[];
-  layer0: { durum: string; refleks: string; neden: string }[];
-  teshis_sirasi: string;
+type MasterProfile = {
+  id: string;
+  name: string;
+  region: string;
+  domain: string;
+  experience_years: number;
+  city: string;
+  work_md: string;
+  persona_md: string;
 };
 
-const USTA_PROFILES: Record<string, Usta> = {
+// --- Fallback (DB boşsa) ---
+const FALLBACK: Record<string, MasterProfile> = {
   Marmara: {
-    ad: "Kemal Yıldız", kidem: 23, bolge: "İstanbul",
-    ekipman: ["BSF 36", "BSF 42", "BSA 1409"],
-    oem: [
-      { konu: "Yağ değişim aralığı", oem: "2000 saat", saha: "1500 saat (yaz)", vaka: 198, basari: 87 },
-      { konu: "Pompa contası", oem: "5000 saat", saha: "3500 saat (yaz)", vaka: 112, basari: 91 },
-    ],
-    layer0: [
-      { durum: "H-201 hidrolik basınç düşüklüğü", refleks: "Önce yağ filtresi fark basıncı ölç", neden: "Saha %30 tıkanma çıkıyor" },
-      { durum: "Yaz + İstanbul nemi", refleks: "Soğutucu fan + radyatör kontrolü", neden: "Yağ ısınması hızlanıyor" },
-    ],
-    teshis_sirasi: "Filtre → Basınç → Valf → Pompa",
+    id: "fallback-marmara", name: "Kemal Yıldız", region: "Marmara", domain: "hidrolik",
+    experience_years: 23, city: "İstanbul",
+    work_md: "BSF 36/42, BSA 1409. Hidrolik öncelik. H-201 → önce filtre fark basıncı.",
+    persona_md: "Layer 0: H-201'de pompaya el sürme, önce filtre. LOTO şart.",
   },
   "İç Anadolu": {
-    ad: "Ahmet Çelik", kidem: 17, bolge: "Ankara",
-    ekipman: ["BSF 36", "BSF 42"],
-    oem: [
-      { konu: "Filtre değişim", oem: "1000 saat", saha: "750 saat (toz)", vaka: 142, basari: 89 },
-    ],
-    layer0: [
-      { durum: "Pompa basıncı düşük", refleks: "Önce filtre, sonra valf", neden: "Ankara tozunda %30 erken tıkanma" },
-    ],
-    teshis_sirasi: "Filtre → Valf → Pompa → Hortum",
+    id: "fallback-ic", name: "Ahmet Çelik", region: "İç Anadolu", domain: "hidrolik",
+    experience_years: 17, city: "Ankara",
+    work_md: "BSF 36/42. Toz koşulu. Filtre 750 saatte değişir.",
+    persona_md: "Layer 0: Ankara'da hava filtresi atlanmaz.",
   },
   Ege: {
-    ad: "Murat Demir", kidem: 12, bolge: "İzmir",
-    ekipman: ["BSF 36", "BSA 1409"],
-    oem: [
-      { konu: "Basınç valfi ayarı", oem: "350 bar", saha: "340 bar", vaka: 87, basari: 93 },
-    ],
-    layer0: [
-      { durum: "B-310 bom kolu", refleks: "Silindir conta ve pim kontrolü önce", neden: "BSF 42'de %54 silindir contasından" },
-    ],
-    teshis_sirasi: "Conta → Pim → Silindir → Valf",
+    id: "fallback-ege", name: "Murat Demir", region: "Ege", domain: "mekanik",
+    experience_years: 12, city: "İzmir",
+    work_md: "BSF 36, BSA 1409. Bom kolu / silindir uzmanı.",
+    persona_md: "Layer 0: Bom kolunda LOTO + emniyet pimi şart.",
   },
 };
 
-function buildSystemPrompt(usta: Usta, woContext: string | null, corrections: { wrong: string; correct: string; lesson: string }[]) {
+function buildSystemPrompt(
+  usta: MasterProfile,
+  woContext: string | null,
+  corrections: { wrong: string; correct: string; lesson: string }[],
+) {
   const month = new Date().getMonth();
   const summer = month >= 5 && month <= 8;
-  const oem = usta.oem.map((f) => `- ${f.konu}: OEM=${f.oem} → Saha=${f.saha} (${f.vaka} vaka, %${f.basari} başarı)`).join("\n");
-  const layer0 = usta.layer0.map((l) => `  DURUM: ${l.durum}\n  REFLEKS: ${l.refleks}\n  NEDEN: ${l.neden}`).join("\n\n");
   const corBlock = corrections.length > 0
-    ? "\nGEÇMİŞ CORRECTION KAYITLARI (bu bağlamda öğrenilmiş):\n" + corrections.map((c) => `- Yanlış: ${c.wrong} → Doğru: ${c.correct} (Ders: ${c.lesson})`).join("\n")
+    ? "\nGEÇMİŞ CORRECTION KAYITLARI (bu bağlamda öğrenilmiş):\n" +
+      corrections.map((c) => `- Yanlış: ${c.wrong} → Doğru: ${c.correct} (Ders: ${c.lesson})`).join("\n")
     : "";
 
   return `Sen ToolA — Putzmeister beton pompası teknisyenlerine yardım eden AI asistan.
+Bu cevabı **${usta.name}** olarak ver (${usta.experience_years} yıl · ${usta.city} · ${usta.domain}).
 
-USTA: ${usta.ad} (${usta.kidem} yıl · ${usta.bolge})
-Ekipman: ${usta.ekipman.join(", ")}${summer && usta.bolge === "İstanbul" ? "\n⚠ YAZ: Soğutucu fan kontrolü kritik." : ""}
-${woContext ? "\nİŞ EMRİ: " + woContext : ""}${corBlock}
+═══ USTA İŞ BİLGİSİ (work.md) ═══
+${usta.work_md}
 
-LAYER 0 — ÇİĞNENEMEZ REFLEKSLER:
-${layer0}
+═══ USTA KİMLİĞİ (persona.md) ═══
+${usta.persona_md}
+${summer && usta.city === "İstanbul" ? "\n⚠ YAZ MEVSİMİ: Soğutucu fan / radyatör peteği kontrolü kritik." : ""}
+${woContext ? "\nİŞ EMRİ BAĞLAMI: " + woContext : ""}${corBlock}
 
-OEM vs SAHA:
-${oem}
-Teşhis sırası: ${usta.teshis_sirasi}
-
-GÜVENLİK (asla atlama):
+═══ GÜVENLİK (asla atlama) ═══
 - Makineyi durdur, LOTO uygula — bom kolu havadayken çalışma
 - Hidrolik yağ 80°C üzeri dokunma
 - Sistemi basınçsız et
 
-YANIT KURALLARI:
-1. Türkçe, sahadan dil
+═══ YANIT KURALLARI ═══
+1. Türkçe, sahadan dil — ${usta.name}'in ifade stiline sadık kal
 2. Güvenlik uyarısı varsa ilk satırda
 3. Adım adım, kısa ve net
-4. Kaynak belirt: Kılavuz s.X, ${usta.ad} notu, N vaka
-5. Emin değilsen söyle
-6. Sorun çözüldüyse iş emri kapatmayı öner
+4. **Her adımda mümkünse** \`source_ref\` (ör. "Hidrolik_Manuel.pdf · sf.42") ve \`confidence\` (0-100) belirt
+5. Kaynak belirt: Kılavuz s.X, ${usta.name} notu, N vaka
+6. Emin değilsen söyle (düşük confidence)
+7. Sorun çözüldüyse iş emri kapatmayı öner
 
-SADECE aşağıdaki tool_call ile yanıt ver: diagnosis_response.`;
+SADECE \`diagnosis_response\` tool_call ile yanıt ver.`;
 }
 
 const TOOL = {
@@ -99,8 +92,8 @@ const TOOL = {
       type: "object",
       properties: {
         type: { type: "string", enum: ["diagnosis", "info", "resolution", "correction_learned"] },
-        safety: { type: "string", description: "Güvenlik uyarısı veya boş string" },
-        text: { type: "string", description: "Kısa açıklama / özet" },
+        safety: { type: "string" },
+        text: { type: "string" },
         steps: {
           type: "array",
           items: {
@@ -110,6 +103,8 @@ const TOOL = {
               text: { type: "string" },
               ref: { type: "string" },
               expected: { type: "string" },
+              source_ref: { type: "string", description: "Kaynak (ör. Hidrolik_Manuel.pdf sf.42)" },
+              confidence: { type: "number", description: "0-100 bu adıma güven" },
             },
             required: ["num", "text"],
             additionalProperties: false,
@@ -151,6 +146,34 @@ const TOOL = {
   },
 };
 
+async function pickUsta(region: string, domain: string | null): Promise<MasterProfile> {
+  try {
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    );
+    let q = supabase
+      .from("master_profiles")
+      .select("*")
+      .eq("region", region)
+      .eq("is_active", true);
+    if (domain) q = q.eq("domain", domain);
+    const { data, error } = await q.limit(1);
+    if (error) console.error("master_profiles fetch err", error);
+    if (data && data.length > 0) return data[0] as MasterProfile;
+    // domain match yoksa region-only dene
+    if (domain) {
+      const { data: d2 } = await supabase
+        .from("master_profiles").select("*")
+        .eq("region", region).eq("is_active", true).limit(1);
+      if (d2 && d2.length > 0) return d2[0] as MasterProfile;
+    }
+  } catch (e) {
+    console.error("pickUsta err", e);
+  }
+  return FALLBACK[region] ?? FALLBACK.Marmara;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -158,12 +181,12 @@ Deno.serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
-    const { question, region, woContext, corrections, history, mode } = await req.json();
+    const { question, region, domain, woContext, corrections, history, mode } = await req.json();
     if (!question || typeof question !== "string") {
       return new Response(JSON.stringify({ error: "question required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const usta = USTA_PROFILES[region as string] ?? USTA_PROFILES.Marmara;
+    const usta = await pickUsta(region as string ?? "Marmara", (domain as string) ?? null);
     const sys = buildSystemPrompt(usta, woContext ?? null, Array.isArray(corrections) ? corrections : []);
 
     const messages: { role: string; content: string }[] = [{ role: "system", content: sys }];
@@ -213,9 +236,19 @@ Deno.serve(async (req) => {
       parsed = { type: "info", safety: "", text: String(txt || "Yanıt alınamadı."), steps: [], confidence: 0 };
     }
 
-    return new Response(JSON.stringify({ result: parsed, usta: { ad: usta.ad, kidem: usta.kidem, bolge: usta.bolge } }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({
+        result: parsed,
+        usta: {
+          id: usta.id,
+          ad: usta.name,
+          kidem: usta.experience_years,
+          bolge: usta.city,
+          domain: usta.domain,
+        },
+      }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
   } catch (e) {
     console.error("diagnose error", e);
     const msg = e instanceof Error ? e.message : "Unknown error";
