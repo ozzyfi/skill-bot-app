@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import type { Machine, Technician } from "@/types/db";
 import { ChevronLeft, Pin, Clock, Alert } from "@/components/icons";
+import LogAnalyzerPanel from "@/components/LogAnalyzerPanel";
 
 const RISK_DEFAULT = [
   { title: "H-201 arızası tekrar riski", sub: "312 vakadan hesaplandı · Ort. 65 günde bir", pct: "%74", detail: "Tahmini sonraki tekrar: <strong>15 Haziran 2026</strong> (±10 gün)", warn: false },
@@ -96,6 +97,8 @@ export default function MachineDetail() {
           </div>
         ))}
       </div>
+
+      <LogAnalyzerPanel machineId={machine.id} region={machine.region} />
 
       <div className="sticky bottom-0 p-3 bg-background border-t border-border flex gap-2">
         <button className="btn-secondary flex-1" onClick={() => navigate("/diagnosis")}>

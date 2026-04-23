@@ -1,136 +1,105 @@
 
+# Sprint 7 — Log Analyzer (Telemetri Köprüsü)
 
-# ToolA 2.0 Yol Haritası — 5 Özellik, Mevcut Kod Üzerine
+Sadece Log Analyzer. Guided Maintenance ve Manager Dashboard backlog'da.
 
-## Mevcut durum analizi (önce ne var, ne yok)
+## Ne yapacak
 
-| Özellik | Var olan | Eksik / yapılacak |
-|---|---|---|
-| 1. Usta Profili | `USTA_PROFILES` **edge function içinde sabit kodlu** (Marmara/Ege/İç Anadolu, 3 usta). `technicians` tablosu var ama ayrı. | Veritabanına taşınacak (`master_profiles`). work.md + persona.md iki katman. Profil ekranı yönetimi. |
-| 2. Aktif Correction | `corrections` tablosu var, kayıt aktif çalışıyor (Diagnosis.tsx satır 79–90). Edge function `corrections`'ı son 8 kayıt olarak prompt'a basıyor (satır 47–52). | "Aktif kural" katmanı yok. Şu an sadece düz metin enjeksiyonu. Kural tipi, sahne eşleştirme, devre dışı bırakma yok. |
-| 3. Voice → İş Emri | CloseWO'da Web Speech API var **ama** transkripti **tek alana dökümpe ediyor** (satır 132–140 `autofillFromTranscript`). | AI parser yok. Transkript → JSON form alanları (Şikayet/Neden/Düzeltme/Parça/Süre) yapay zekayla bölünecek. |
-| 4. Video → SOP | Hiç yok. Storage bucket yok. | Yeni bucket, video upload, Gemini Vision ile çerçeve analizi → adımlar → `learning_cases`. |
-| 5. Güven + Kaynak Rozeti | `result.sources` ve `confidence` zaten edge function'dan geliyor. UI'da var ama **sadece bubble dibinde toplu liste** (Diagnosis.tsx 274–285). | Her **adımın yanında** rozet (kaynak + güven %). Adım bazlı kaynak için step şemasına `confidence` ve `source_ref` eklenecek. |
+Saha teknisyeni makinenin PLC/HMI panelinden indirdiği log dosyasını (.txt / .csv / .log) makine ekranından yükler. AI dosyayı okur, alarm/uyarı örüntülerini çıkarır, **aynı makinenin geçmiş loglarıyla karşılaştırır** ("3 hafta önce de aynı titreşim örüntüsü vardı") ve önerilen aksiyonları listeler. Sonuç kalıcı saklanır, makine sayfasında geçmiş analizler görünür.
 
-**Önemli karar**: 5 özelliği üç sprint'e bölelim — her sprint kendi başına çalışır, biri bitmeden öbürünü inşa etmek mantıksız çünkü 1 numara diğer 4'ünün altyapısı.
+## Mimari (mevcut Video → SOP modeline birebir paralel)
 
----
+```text
+[MachineDetail.tsx]
+   └─ <LogAnalyzerPanel/>
+        ├─ Dosya seç (kamera değil, file picker)
+        ├─ Storage'a yükle  ──►  bucket: machine-logs (private)
+        ├─ INSERT machine_logs (status='uploaded')
+        ├─ invoke('log_analyzer', { log_id })
+        │     └─ edge fn:
+        │         1. signed URL al, dosyayı indir (text)
+        │         2. aynı machine_id için son 5 'ready' log'u çek (önceki findings)
+        │         3. Gemini'ye gönder (tool call) → findings + recurring_match
+        │         4. UPDATE machine_logs (status='ready', findings, ...)
+        └─ Poll (3 sn) → 'ready' olunca sonuç kartı render
+```
 
-## Sprint 4 — Usta Profili (Foundation) + Güven/Kaynak Rozeti UI
+## Veritabanı
 
-**Neden birlikte**: Güven rozeti UI işi 1–2 saatlik, ek backend gerektirmiyor (mevcut alanları kullanıyor). Sprint 4'e eklemek ekonomik.
+Yeni tablo `machine_logs`:
+- `id uuid pk`
+- `machine_id uuid` (zorunlu — tarihsel eşleştirme için)
+- `wo_id uuid null`
+- `storage_path text` (machine-logs bucket içinde `{user_id}/{uuid}.txt`)
+- `file_name text`, `file_size int`
+- `status text` ('uploaded' | 'processing' | 'ready' | 'failed')
+- `summary text` — 1-2 cümlelik özet
+- `findings jsonb` — `[{ severity: 'info'|'warn'|'critical', code: 'H-201', message: '...', count: 12, first_seen: '...', last_seen: '...' }]`
+- `recurring_match jsonb` — `{ matched_log_id, matched_date, similarity_pct, note }` (nullable)
+- `recommendations jsonb` — `[string]`
+- `error_msg text null`
+- `region region_t`
+- `created_by uuid`, `created_at`, `updated_at`
 
-### Yapılacaklar
+RLS: `repair_videos` ile aynı kalıp (auth read all, auth insert own, owner update).
 
-**A. Yeni tablo: `master_profiles`**
-- Alanlar: `id`, `name`, `region`, `domain` (örn. "hidrolik"), `experience_years`, `city`, `work_md` (text — teknik bilgi), `persona_md` (text — 5 katman), `is_active`, `version`, `created_at`
-- RLS: herkes okur (authenticated), sadece admin yazar — şimdilik admin role yok, `created_by = auth.uid()` ile own-write yeterli, sonra admin role eklenebilir
-- Seed: edge function'daki 3 ustayı (Kemal, Ahmet, Murat) work.md + persona.md formatında tabloya taşı
+Storage bucket: `machine-logs` (private). RLS: kullanıcı sadece kendi `{auth.uid()}/...` klasörüne yazıp okur.
 
-**B. Edge function `diagnose` güncellemesi**
-- `USTA_PROFILES` sabitinden `master_profiles` tablosundan okumaya geç
-- Eşleştirme mantığı: önce `region` ile filtre, varsa `domain` (hidrolik/elektrik/mekanik) ile en uygun
-- `buildSystemPrompt` work_md + persona_md'yi olduğu gibi sisteme enjekte eder
-- Geri dönüş: `usta` objesine `id`, `domain` da eklenir
+## Edge function: `log_analyzer`
 
-**C. Güven + Kaynak Rozeti (her adım yanında)**
-- Edge function'daki `TOOL` şemasında `steps` item'ına opsiyonel iki alan ekle: `source_ref` (string — örn. "Hidrolik_Manuel.pdf · sf.42") ve `confidence` (number 0–100)
-- Sistem prompt'a kural ekle: "Her adımda mümkünse kaynak ve güven belirt"
-- `Diagnosis.tsx` AssistantBubble step render'ında sağ alt köşede küçük rozet:
-  ```
-  [Kaynak: Hidrolik_Manuel sf.42] [%87]
-  ```
-- Mevcut alt-bölüm "Kaynaklar" toplu listesi kalır (genel kaynaklar için)
+- Input: `{ log_id }`
+- Akış:
+  1. `machine_logs` satırını al, status='processing' yap
+  2. Storage'dan signed URL → dosyayı text olarak indir (max ~500KB; üstü ise ilk 500KB + son 50KB kırpılır)
+  3. Aynı `machine_id` için son 5 `ready` kayıttaki `findings`'i context olarak topla
+  4. Gemini `google/gemini-3-flash-preview` + tool call (`log_analysis_response` şeması: `summary`, `findings[]`, `recurring_match`, `recommendations[]`)
+  5. Sonucu `machine_logs`'a yaz, status='ready'
+  6. Hata → status='failed', error_msg
+- Hata mesajları: 429 (rate limit) ve 402 (kredi) Türkçe çevrilip dönülür
 
-**D. Profile sayfası — "Usta'm" sekmesi**
-- Profile.tsx'e bölge için aktif master profile'ı oku, work_md/persona_md önizleme göster (read-only şimdilik)
-- "Bu cevap kimden geldi?" şeffaflığı
+## UI
 
-**Çıktı**: Marmara'dan biri "H-201" sorduğunda Kemal Usta cevap veriyor, her adımın yanında kaynak + güven görünüyor, profil ekranında "Bu cevapları Kemal Usta veriyor" yazıyor.
+**Yeni komponent**: `src/components/LogAnalyzerPanel.tsx`
+- Üst: `<input type="file" accept=".txt,.csv,.log,.json">` + "Logu Analiz Et" butonu
+- Yükleme: progress + "AI inceliyor…" durumu (status polling)
+- Sonuç kartı:
+  - Özet bandı
+  - Findings listesi (severity'e göre renkli rozet: kritik=kırmızı, uyarı=sarı, info=gri)
+  - Recurring match (varsa) — vurgulu kutu: "Bu örüntü {tarih} tarihindeki log ile %{x} eşleşiyor"
+  - Öneriler (madde listesi)
+- Altta: "Bu makinenin geçmiş analizleri" — kronolojik küçük liste, tıklayınca detay açılır
 
-**Sprint 4 dokunduğu dosyalar**: yeni migration, `supabase/functions/diagnose/index.ts`, `src/pages/Diagnosis.tsx` (AssistantBubble), `src/pages/Profile.tsx`. Yeni: `src/types/db.ts` (MasterProfile tipi).
+**`src/pages/MachineDetail.tsx`**: "Risk Analizi" bölümünün altına `<LogAnalyzerPanel machineId={machine.id} region={machine.region} />` eklenir. Mevcut "Risk Analizi" sabit metni kalır (sonradan finding'lerden beslenebilir, şimdi değil).
 
----
+**`src/types/db.ts`**: `MachineLog` interface eklenir.
 
-## Sprint 5 — Aktif Correction Döngüsü + Voice → İş Emri
+## Dokunulan/oluşturulan dosyalar
 
-**Neden birlikte**: İkisi de orta-büyük iş, ikisi de mevcut bir özelliğin "akıllılaştırılması". Yeni tablo + yeni edge function birlikte deploy edilir.
+- **Yeni migration**: `machine_logs` tablosu + RLS + `machine-logs` storage bucket + bucket RLS
+- **Yeni**: `supabase/functions/log_analyzer/index.ts`
+- **Yeni**: `src/components/LogAnalyzerPanel.tsx`
+- **Düzenleme**: `src/pages/MachineDetail.tsx` (panel mount)
+- **Düzenleme**: `src/types/db.ts` (MachineLog tipi)
 
-### Yapılacaklar
+## Yapmadığım/yapmayacağım şeyler (net)
 
-**A. Aktif Correction katmanı**
-- Yeni tablo: `correction_rules`
-  - Alanlar: `id`, `master_profile_id` (fk), `region`, `scene_pattern` (text — eşleşecek anahtar kelimeler/regex), `wrong`, `correct`, `lesson`, `is_active`, `applied_count`, `created_at`, `created_by`
-- Mevcut `corrections` tablosu kalır (ham kayıt için), ama 👎 → correction_learned dönüşünde **otomatik olarak** `correction_rules`'a da eklenir
-- `diagnose` edge function:
-  - Mevcut "son 8 correction" yerine: aktif kuralları çek, **sahne eşleşmesi** yapanları seç (basit: scene_pattern keywords içeren soru), system prompt'a "ZORUNLU UYULACAK KURALLAR" başlığıyla enjekte et
-  - Her uygulama sonrası `applied_count++`
-- Profile / Admin sayfada: "Bu bölgede öğrenilmiş kurallar" listesi (sayı + son uygulama)
+- Guided Maintenance — backlog
+- Manager Dashboard / bilgi boşluğu raporu — backlog
+- ROI calculator — backlog
+- Çoklu dil — backlog
+- Compliance/ISG checklist — backlog
+- ffmpeg/binary log parsing — şimdilik sadece **text log** (PLC export'u zaten text/csv'dir)
 
-**B. Voice → İş Emri (AI parser)**
-- Yeni edge function: `voice_to_workorder`
-  - Input: `{ transcript: string, category: "ariza"|"bakim"|"parca"|"diger" }`
-  - Lovable AI gateway'e tool calling ile çağrı: kategori şemasına göre alanları çıkart
-  - Model: `google/gemini-3-flash-preview` (hızlı, ucuz, Türkçe iyi)
-  - Output: `{ values: { ariza: "...", neden: "...", yapilan: "...", sure: "45" } }`
-- `CloseWO.tsx` `autofillFromTranscript` fonksiyonu:
-  - Eski "tek alana dök" mantığını sil
-  - Web Speech API transkripti tamamlandığında → `voice_to_workorder` çağır → dönen `values`'ı tek tek `setValues` ile yerleştir
-  - Loading state: "Anlatılanı alanlara yerleştiriyorum…"
-- Deepgram **eklenmiyor** — Web Speech API yeterli (zaten çalışıyor) + Gemini parsing yeni değer ekleyen kısım. Deepgram parası vs ek karmaşıklık şimdilik gereksiz; ihtiyaç olursa Sprint 6+ya bırakırız.
-- Offline için: çevrimdışıysa eski heuristic fallback (textarea'ya ham transkripti koy) çalışmaya devam eder
+## Maliyet/risk notu
 
-**Çıktı**: Usta 👎 verdiğinde "Yağ filtresinden önce hortumu kontrol etmeliydim" dediğinde, bir sonraki "H-201 düşük basınç" sorusunda AI otomatik o kuralı uyguluyor. /close ekranında mikrofona "Filtre tıkalıydı, değiştirdim, 45 dk" dediğinde 4 alan tek seferde dolu.
+Log dosyaları büyük olabilir. 500KB cap + tool calling ile token kontrolü. Aynı makineden tarihsel context yalnız `findings` jsonb'sinden gelir (ham log değil) → token şişmesi olmaz. Lovable AI gateway, mevcut `LOVABLE_API_KEY` ile çalışır, ek secret yok.
 
-**Sprint 5 dokunduğu dosyalar**: yeni migration, yeni `supabase/functions/voice_to_workorder/index.ts`, `supabase/functions/diagnose/index.ts` (kural enjeksiyonu), `src/pages/Diagnosis.tsx` (correction → rule dönüşümü), `src/pages/CloseWO.tsx` (autofill yeniden yaz), `src/pages/Profile.tsx` (kurallar listesi).
+## Onay sonrası sıra
 
----
+1. Migration (tablo + bucket + RLS)
+2. `log_analyzer` edge function
+3. `MachineLog` tipi
+4. `LogAnalyzerPanel` komponenti
+5. `MachineDetail.tsx` entegrasyonu
 
-## Sprint 6 — Video → SOP
-
-**Neden tek başına**: Storage, video processing, Gemini Vision ayrı bir bağımlılık zinciri. Diğerleri hayata geçtikten sonra bunu eklemek daha güvenli.
-
-### Yapılacaklar
-
-**A. Storage + tablo**
-- Yeni bucket: `repair-videos` (public değil, signed URL ile erişim)
-- Yeni tablo: `repair_videos` — `id`, `learning_case_id` (fk nullable), `wo_id` (fk), `storage_path`, `duration_sec`, `sop_steps` (jsonb — adımlar), `transcript`, `status` ("uploaded"|"processing"|"ready"|"failed"), `created_by`, `created_at`
-- RLS: own-write, region-read
-
-**B. Edge function `video_to_sop`**
-- Input: `{ video_id, storage_path, wo_context }`
-- İşleyiş:
-  1. Storage'dan signed URL al
-  2. Video'dan ffmpeg ile her N saniyede bir frame çıkar (Deno + ffmpeg WASM **karmaşık** — alternatif: Gemini 2.5-flash zaten video URL kabul ediyor, doğrudan video URL'sini multimodal mesaj olarak gönder)
-  3. Tool call ile `sop_response` şemasında `steps[]` ve `summary` döndür
-  4. `repair_videos` satırını güncelle, `learning_cases`'e link
-
-**C. UI**
-- `CloseWO.tsx` ve `JobDetail.tsx`'a "Video Çek" butonu — `<input type="file" accept="video/*" capture="environment">` ile mobil kamera açar
-- Upload progress, "AI işliyor…" durumu (poll ile status kontrolü)
-- Hazır olduğunda `learning_cases` üzerinden o makinenin geçmişinde görünür, yeni iş emri açıldığında benzer şikayetlerde "İlgili video: …" önerisi
-
-**Çıktı**: Usta tamir esnasında 90 saniye video çeker, 30 saniye sonra adım adım yazılı prosedür sahasına yazar.
-
-**Sprint 6 dokunduğu dosyalar**: yeni migration (bucket + tablo + RLS), yeni `supabase/functions/video_to_sop/index.ts`, `src/pages/CloseWO.tsx` (upload buton), `src/pages/JobDetail.tsx` (video önerisi).
-
----
-
-## Önerilen sıra ve gerekçe
-
-1. **Sprint 4** önce (3–5 saatlik iş): Usta profilini koddan tabloya taşımak diğer her şeyin altyapısı. Güven rozeti küçük ama görsel etki yüksek, beraber ekonomik.
-2. **Sprint 5** (5–7 saat): Hem öğrenme döngüsü hem ses-form. İkisi en yüksek "saha değeri" katan özellikler. Voice parsing bittiğinde demo etkisi büyük.
-3. **Sprint 6** (4–6 saat): Video. Diğerleri çalıştıktan sonra. Mobil kamera + storage + AI vision en kırılgan zincir, en sona.
-
-## Teknik notlar / dikkat noktaları
-
-- **`technicians` tablosu**: zaten var ama persona/work-md alanı yok. Ya bu tabloyu genişletip yeniden kullanırız (kolonlar ekleriz) ya da yeni `master_profiles` tablosu açıp `technicians`'ı sade bir lookup olarak bırakırız. **Öneri**: yeni `master_profiles` tablosu — `technicians` 4 alanlık basit liste, master profile çok daha zengin; karıştırmak kafa karıştırır.
-- **Edge function'da hardcoded `USTA_PROFILES`**: silinmiyor hemen, fallback olarak kalabilir (DB boşsa). 1 hafta sonra kaldırılır.
-- **`corrections` tablosu**: silinmiyor. Aktif kural katmanı **üstüne** eklenir; ham veri tarihsel olarak kalır.
-- **Lovable AI gateway**: Hem `voice_to_workorder` hem `video_to_sop` aynı `LOVABLE_API_KEY`'i kullanır, ek secret yok. Maliyet izlenmeli (özellikle video).
-- **Yönetici dashboard'u**: Sen dedin "yönetici tarafı için önemli" — bu listede yok ama Sprint 4'ün master_profiles tablosu ile Sprint 5'in correction_rules tablosu hazırsa, dashboard ileride ayrı bir build (Sprint 7) olarak inşa edilir.
-
-## Şimdi karar
-
-Bu yol haritası mantıklı geldiyse **Sprint 4** ile başlayalım — Usta profili tabloya taşınır + güven/kaynak rozeti her adımın yanına eklenir. Onayını verirsen kodlama moduna geçip migration ve dosya değişikliklerini yaparım.
-
+Onaylarsan kodlamaya geçerim.

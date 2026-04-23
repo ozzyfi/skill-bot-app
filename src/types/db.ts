@@ -86,6 +86,36 @@ export interface CorrectionRule {
   last_applied_at: string | null;
 }
 
+export interface LogFinding {
+  severity: "info" | "warn" | "critical";
+  code?: string;
+  message: string;
+  count: number;
+  first_seen?: string;
+  last_seen?: string;
+}
+
+export interface MachineLog {
+  id: string;
+  machine_id: string;
+  wo_id: string | null;
+  storage_path: string;
+  file_name: string;
+  file_size: number | null;
+  status: "uploaded" | "processing" | "ready" | "failed";
+  summary: string | null;
+  findings: LogFinding[];
+  recurring_match: {
+    matched_log_id: string;
+    matched_date?: string;
+    similarity_pct: number;
+    note: string;
+  } | null;
+  recommendations: string[];
+  error_msg: string | null;
+  created_at: string;
+}
+
 export interface RepairVideo {
   id: string;
   wo_id: string | null;

@@ -149,6 +149,63 @@ export type Database = {
         }
         Relationships: []
       }
+      machine_logs: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          error_msg: string | null
+          file_name: string
+          file_size: number | null
+          findings: Json
+          id: string
+          machine_id: string
+          recommendations: Json
+          recurring_match: Json | null
+          region: Database["public"]["Enums"]["region_t"] | null
+          status: string
+          storage_path: string
+          summary: string | null
+          updated_at: string
+          wo_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          error_msg?: string | null
+          file_name: string
+          file_size?: number | null
+          findings?: Json
+          id?: string
+          machine_id: string
+          recommendations?: Json
+          recurring_match?: Json | null
+          region?: Database["public"]["Enums"]["region_t"] | null
+          status?: string
+          storage_path: string
+          summary?: string | null
+          updated_at?: string
+          wo_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          error_msg?: string | null
+          file_name?: string
+          file_size?: number | null
+          findings?: Json
+          id?: string
+          machine_id?: string
+          recommendations?: Json
+          recurring_match?: Json | null
+          region?: Database["public"]["Enums"]["region_t"] | null
+          status?: string
+          storage_path?: string
+          summary?: string | null
+          updated_at?: string
+          wo_id?: string | null
+        }
+        Relationships: []
+      }
       machines: {
         Row: {
           alert_text: string | null
