@@ -24,6 +24,7 @@ export default function JobDetail() {
   const [wo, setWo] = useState<Wo | null>(null);
   const [loading, setLoading] = useState(true);
   const [checked, setChecked] = useState<Record<string, boolean>>({});
+  const [videos, setVideos] = useState<RepairVideo[]>([]);
 
   useEffect(() => {
     if (!id) return;
@@ -34,6 +35,17 @@ export default function JobDetail() {
         .eq("id", id)
         .maybeSingle();
       setWo(data as any);
+      if (data) {
+        const woRow = data as any;
+        const { data: vids } = await supabase
+          .from("repair_videos")
+          .select("*")
+          .or(`wo_id.eq.${woRow.id},machine_id.eq.${woRow.machine_id}`)
+          .eq("status", "ready")
+          .order("created_at", { ascending: false })
+          .limit(5);
+        setVideos((vids ?? []) as any);
+      }
       setLoading(false);
     })();
   }, [id]);
