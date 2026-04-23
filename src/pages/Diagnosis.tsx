@@ -75,18 +75,38 @@ export default function Diagnosis() {
         { role: "assistant", content: result.text || "", result, usta },
       ]);
 
-      // If correction returned, persist it
+      // If correction returned, persist it AND create active rule
       if (result.type === "correction_learned" && result.correction?.wrong) {
-        const { error: cErr } = await supabase.from("corrections").insert({
-          scene: result.correction.scene || question.slice(0, 200),
+        const userId = (await supabase.auth.getUser()).data.user?.id ?? null;
+        const sceneText = result.correction.scene || question.slice(0, 200);
+        const { data: corrRow } = await supabase.from("corrections").insert({
+          scene: sceneText,
           wrong: result.correction.wrong,
           correct: result.correction.correct,
           lesson: result.correction.lesson,
           bolge: region,
           usta: usta?.ad ?? "",
-          created_by: (await supabase.auth.getUser()).data.user?.id ?? null,
+          created_by: userId,
+        }).select("id").maybeSingle();
+
+        // Find usta master_profile id by region for FK
+        const { data: mp } = await supabase
+          .from("master_profiles").select("id")
+          .eq("region", region).eq("is_active", true)
+          .order("experience_years", { ascending: false }).limit(1).maybeSingle();
+
+        await supabase.from("correction_rules").insert({
+          master_profile_id: mp?.id ?? null,
+          region,
+          scene_pattern: sceneText,
+          wrong: result.correction.wrong,
+          correct: result.correction.correct,
+          lesson: result.correction.lesson,
+          source_correction_id: corrRow?.id ?? null,
+          created_by: userId,
         });
-        if (!cErr) toast({ title: "📝 Correction kaydedildi", description: result.correction.lesson });
+
+        toast({ title: "📝 Kural öğrenildi", description: result.correction.lesson });
       }
     } catch (e: any) {
       toast({ title: "Hata", description: e.message ?? "AI yanıt veremedi", variant: "destructive" });
