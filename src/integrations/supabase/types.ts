@@ -140,6 +140,54 @@ export type Database = {
         }
         Relationships: []
       }
+      master_profiles: {
+        Row: {
+          city: string
+          created_at: string
+          created_by: string | null
+          domain: string
+          experience_years: number
+          id: string
+          is_active: boolean
+          name: string
+          persona_md: string
+          region: Database["public"]["Enums"]["region_t"]
+          updated_at: string
+          version: number
+          work_md: string
+        }
+        Insert: {
+          city: string
+          created_at?: string
+          created_by?: string | null
+          domain?: string
+          experience_years?: number
+          id?: string
+          is_active?: boolean
+          name: string
+          persona_md?: string
+          region: Database["public"]["Enums"]["region_t"]
+          updated_at?: string
+          version?: number
+          work_md?: string
+        }
+        Update: {
+          city?: string
+          created_at?: string
+          created_by?: string | null
+          domain?: string
+          experience_years?: number
+          id?: string
+          is_active?: boolean
+          name?: string
+          persona_md?: string
+          region?: Database["public"]["Enums"]["region_t"]
+          updated_at?: string
+          version?: number
+          work_md?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           client: string
