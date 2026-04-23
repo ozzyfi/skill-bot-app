@@ -129,6 +129,25 @@ export default function JobDetail() {
           ))}
         </div>
 
+        {/* AI-generated SOPs from past repair videos */}
+        {videos.length > 0 && (
+          <div className="section">
+            <div className="section-title">📹 Video → SOP ({videos.length})</div>
+            <div className="section-sub">Bu ekipmandan AI ile çıkarılmış prosedürler</div>
+            {videos.map((v) => (
+              <div key={v.id} className="py-2.5 border-b border-border last:border-0">
+                <div className="text-[13px] font-semibold mb-1">{v.summary || "Tamir prosedürü"}</div>
+                <div className="text-[11px] text-text-3 mb-1.5">{new Date(v.created_at).toLocaleDateString("tr-TR")} · {v.sop_steps?.length ?? 0} adım</div>
+                <ol className="space-y-1 text-[12.5px] text-text-2 list-decimal list-inside">
+                  {(v.sop_steps ?? []).slice(0, 5).map((s, i) => (
+                    <li key={i}>{s.text}{s.time ? <span className="text-text-3"> · {s.time}</span> : null}</li>
+                  ))}
+                </ol>
+              </div>
+            ))}
+          </div>
+        )}
+
         {closed && (
           <div className="m-5 p-3 bg-primary-bg text-primary text-[13px] rounded-lg text-center font-semibold">
             ✓ Bu iş emri kapatıldı

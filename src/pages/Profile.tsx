@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import type { MasterProfile } from "@/types/db";
+import type { MasterProfile, CorrectionRule } from "@/types/db";
 
 export default function Profile() {
   const { profile, user, signOut } = useAuth();
-  const [tab, setTab] = useState<"profil" | "usta">("profil");
+  const [tab, setTab] = useState<"profil" | "usta" | "kurallar">("profil");
   const [usta, setUsta] = useState<MasterProfile | null>(null);
   const [loadingUsta, setLoadingUsta] = useState(false);
+  const [rules, setRules] = useState<CorrectionRule[]>([]);
+  const [loadingRules, setLoadingRules] = useState(false);
 
   useEffect(() => {
     if (tab !== "usta" || !profile?.region) return;
