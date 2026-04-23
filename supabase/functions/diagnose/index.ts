@@ -193,7 +193,43 @@ Deno.serve(async (req) => {
     }
 
     const usta = await pickUsta(region as string ?? "Marmara", (domain as string) ?? null);
-    const sys = buildSystemPrompt(usta, woContext ?? null, Array.isArray(corrections) ? corrections : []);
+
+    // Fetch active correction_rules for this region; pick scene-matching ones
+    const supa = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    );
+    const qLower = String(question).toLowerCase();
+    const { data: ruleRows } = await supa
+      .from("correction_rules")
+      .select("id, scene_pattern, wrong, correct, lesson, applied_count")
+      .eq("region", region as string ?? "Marmara")
+      .eq("is_active", true)
+      .order("applied_count", { ascending: false })
+      .limit(40);
+    const matched: any[] = [];
+    for (const r of ruleRows ?? []) {
+      const pattern = String(r.scene_pattern ?? "").toLowerCase();
+      const tokens = pattern.split(/[\s,;|]+/).filter((t) => t.length >= 3);
+      const hit = tokens.some((t) => qLower.includes(t));
+      if (hit) matched.push(r);
+      if (matched.length >= 6) break;
+    }
+
+    const sys = buildSystemPrompt(
+      usta,
+      woContext ?? null,
+      Array.isArray(corrections) ? corrections : [],
+      matched.map((r) => ({ wrong: r.wrong, correct: r.correct, lesson: r.lesson })),
+    );
+
+    // Bump applied_count for matched rules (fire & forget)
+    for (const r of matched) {
+      supa.from("correction_rules").update({
+        applied_count: (r.applied_count ?? 0) + 1,
+        last_applied_at: new Date().toISOString(),
+      }).eq("id", r.id).then(() => {});
+    }
 
     const messages: { role: string; content: string }[] = [{ role: "system", content: sys }];
     if (Array.isArray(history)) {
