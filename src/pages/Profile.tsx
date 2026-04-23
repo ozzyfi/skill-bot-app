@@ -108,6 +108,36 @@ export default function Profile() {
           )}
         </div>
       )}
+
+      {tab === "kurallar" && (
+        <div className="p-5 space-y-3">
+          {loadingRules && <div className="text-sm text-text-3">Yükleniyor…</div>}
+          {!loadingRules && rules.length === 0 && (
+            <div className="text-sm text-text-3">
+              Henüz öğrenilmiş kural yok. Teşhiste 👎 verdiğinde AI yeni kural üretip buraya ekler.
+            </div>
+          )}
+          {!loadingRules && rules.length > 0 && (
+            <div className="text-[12px] text-text-3 mb-1">
+              {profile?.region} bölgesinde aktif {rules.length} kural — sahada öğrenildi
+            </div>
+          )}
+          {rules.map((r) => (
+            <div key={r.id} className="bg-bg-2 border border-border rounded-xl p-3 space-y-1.5">
+              <div className="flex justify-between items-start gap-2">
+                <div className="text-[11px] text-text-3 uppercase tracking-wider font-bold">Sahne</div>
+                <div className="text-[10px] font-bold text-primary bg-primary-bg px-1.5 py-0.5 rounded">
+                  {r.applied_count}× uygulandı
+                </div>
+              </div>
+              <div className="text-[13px]">{r.scene_pattern}</div>
+              <div className="text-[12px]"><span className="text-destructive font-semibold">Yanlış:</span> {r.wrong}</div>
+              <div className="text-[12px]"><span className="text-primary font-semibold">Doğru:</span> {r.correct}</div>
+              <div className="text-[12px] text-text-2 italic">📝 {r.lesson}</div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
