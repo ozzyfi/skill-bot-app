@@ -34,7 +34,7 @@ export default function LogAnalyzerPanel({ machineId, region }: Props) {
       .eq("machine_id", machineId)
       .order("created_at", { ascending: false })
       .limit(20);
-    setLogs((data ?? []) as MachineLog[]);
+    setLogs(((data ?? []) as unknown) as MachineLog[]);
   };
 
   useEffect(() => { load(); }, [machineId]);
