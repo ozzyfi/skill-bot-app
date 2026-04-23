@@ -14,6 +14,69 @@ export type Database = {
   }
   public: {
     Tables: {
+      correction_rules: {
+        Row: {
+          applied_count: number
+          correct: string
+          created_at: string
+          created_by: string | null
+          id: string
+          is_active: boolean
+          last_applied_at: string | null
+          lesson: string
+          master_profile_id: string | null
+          region: Database["public"]["Enums"]["region_t"]
+          scene_pattern: string
+          source_correction_id: string | null
+          wrong: string
+        }
+        Insert: {
+          applied_count?: number
+          correct: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          last_applied_at?: string | null
+          lesson: string
+          master_profile_id?: string | null
+          region: Database["public"]["Enums"]["region_t"]
+          scene_pattern: string
+          source_correction_id?: string | null
+          wrong: string
+        }
+        Update: {
+          applied_count?: number
+          correct?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          last_applied_at?: string | null
+          lesson?: string
+          master_profile_id?: string | null
+          region?: Database["public"]["Enums"]["region_t"]
+          scene_pattern?: string
+          source_correction_id?: string | null
+          wrong?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "correction_rules_master_profile_id_fkey"
+            columns: ["master_profile_id"]
+            isOneToOne: false
+            referencedRelation: "master_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "correction_rules_source_correction_id_fkey"
+            columns: ["source_correction_id"]
+            isOneToOne: false
+            referencedRelation: "corrections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       corrections: {
         Row: {
           bolge: Database["public"]["Enums"]["region_t"]
@@ -211,6 +274,82 @@ export type Database = {
           region?: Database["public"]["Enums"]["region_t"]
         }
         Relationships: []
+      }
+      repair_videos: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          duration_sec: number | null
+          error_msg: string | null
+          id: string
+          learning_case_id: string | null
+          machine_id: string | null
+          region: Database["public"]["Enums"]["region_t"] | null
+          sop_steps: Json
+          status: string
+          storage_path: string
+          summary: string | null
+          transcript: string | null
+          updated_at: string
+          wo_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          duration_sec?: number | null
+          error_msg?: string | null
+          id?: string
+          learning_case_id?: string | null
+          machine_id?: string | null
+          region?: Database["public"]["Enums"]["region_t"] | null
+          sop_steps?: Json
+          status?: string
+          storage_path: string
+          summary?: string | null
+          transcript?: string | null
+          updated_at?: string
+          wo_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          duration_sec?: number | null
+          error_msg?: string | null
+          id?: string
+          learning_case_id?: string | null
+          machine_id?: string | null
+          region?: Database["public"]["Enums"]["region_t"] | null
+          sop_steps?: Json
+          status?: string
+          storage_path?: string
+          summary?: string | null
+          transcript?: string | null
+          updated_at?: string
+          wo_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "repair_videos_learning_case_id_fkey"
+            columns: ["learning_case_id"]
+            isOneToOne: false
+            referencedRelation: "learning_cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "repair_videos_machine_id_fkey"
+            columns: ["machine_id"]
+            isOneToOne: false
+            referencedRelation: "machines"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "repair_videos_wo_id_fkey"
+            columns: ["wo_id"]
+            isOneToOne: false
+            referencedRelation: "work_orders"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       technicians: {
         Row: {

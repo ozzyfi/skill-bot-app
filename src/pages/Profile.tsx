@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import type { MasterProfile } from "@/types/db";
+import type { MasterProfile, CorrectionRule } from "@/types/db";
 
 export default function Profile() {
   const { profile, user, signOut } = useAuth();
-  const [tab, setTab] = useState<"profil" | "usta">("profil");
+  const [tab, setTab] = useState<"profil" | "usta" | "kurallar">("profil");
   const [usta, setUsta] = useState<MasterProfile | null>(null);
   const [loadingUsta, setLoadingUsta] = useState(false);
+  const [rules, setRules] = useState<CorrectionRule[]>([]);
+  const [loadingRules, setLoadingRules] = useState(false);
 
   useEffect(() => {
     if (tab !== "usta" || !profile?.region) return;
@@ -26,6 +28,22 @@ export default function Profile() {
       });
   }, [tab, profile?.region]);
 
+  useEffect(() => {
+    if (tab !== "kurallar" || !profile?.region) return;
+    setLoadingRules(true);
+    supabase
+      .from("correction_rules")
+      .select("*")
+      .eq("region", profile.region)
+      .eq("is_active", true)
+      .order("applied_count", { ascending: false })
+      .limit(50)
+      .then(({ data }) => {
+        setRules((data ?? []) as any);
+        setLoadingRules(false);
+      });
+  }, [tab, profile?.region]);
+
   return (
     <div>
       <div className="px-5 py-6 border-b border-border">
@@ -35,6 +53,7 @@ export default function Profile() {
       <div className="flex border-b border-border px-5">
         <TabBtn active={tab === "profil"} onClick={() => setTab("profil")}>Profilim</TabBtn>
         <TabBtn active={tab === "usta"} onClick={() => setTab("usta")}>Usta'm</TabBtn>
+        <TabBtn active={tab === "kurallar"} onClick={() => setTab("kurallar")}>Kurallar</TabBtn>
       </div>
 
       {tab === "profil" && (
@@ -87,6 +106,36 @@ export default function Profile() {
               </div>
             </>
           )}
+        </div>
+      )}
+
+      {tab === "kurallar" && (
+        <div className="p-5 space-y-3">
+          {loadingRules && <div className="text-sm text-text-3">Yükleniyor…</div>}
+          {!loadingRules && rules.length === 0 && (
+            <div className="text-sm text-text-3">
+              Henüz öğrenilmiş kural yok. Teşhiste 👎 verdiğinde AI yeni kural üretip buraya ekler.
+            </div>
+          )}
+          {!loadingRules && rules.length > 0 && (
+            <div className="text-[12px] text-text-3 mb-1">
+              {profile?.region} bölgesinde aktif {rules.length} kural — sahada öğrenildi
+            </div>
+          )}
+          {rules.map((r) => (
+            <div key={r.id} className="bg-bg-2 border border-border rounded-xl p-3 space-y-1.5">
+              <div className="flex justify-between items-start gap-2">
+                <div className="text-[11px] text-text-3 uppercase tracking-wider font-bold">Sahne</div>
+                <div className="text-[10px] font-bold text-primary bg-primary-bg px-1.5 py-0.5 rounded">
+                  {r.applied_count}× uygulandı
+                </div>
+              </div>
+              <div className="text-[13px]">{r.scene_pattern}</div>
+              <div className="text-[12px]"><span className="text-destructive font-semibold">Yanlış:</span> {r.wrong}</div>
+              <div className="text-[12px]"><span className="text-primary font-semibold">Doğru:</span> {r.correct}</div>
+              <div className="text-[12px] text-text-2 italic">📝 {r.lesson}</div>
+            </div>
+          ))}
         </div>
       )}
     </div>

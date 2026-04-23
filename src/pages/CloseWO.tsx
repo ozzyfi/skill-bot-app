@@ -63,7 +63,10 @@ export default function CloseWO() {
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [listening, setListening] = useState(false);
+  const [parsing, setParsing] = useState(false);
   const [transcript, setTranscript] = useState("");
+  const [videoUploading, setVideoUploading] = useState(false);
+  const [videoStatus, setVideoStatus] = useState<string>("");
   const recRef = useRef<any>(null);
 
   useEffect(() => {
@@ -127,16 +130,92 @@ export default function CloseWO() {
     setListening(false);
   };
 
-  // Heuristic autofill — drop the whole transcript into the first textarea/required field
-  // and let the operator edit. Better than nothing without AI parsing.
-  const autofillFromTranscript = (text: string) => {
+  // AI-powered autofill: send transcript to voice_to_workorder edge function
+  const autofillFromTranscript = async (text: string) => {
     const txt = text.trim();
-    const newValues: Record<string, string> = { ...values };
-    // Prefer a textarea field if one exists
-    const target = activeCat.fields.find((f) => f.type === "textarea") ?? activeCat.fields.find((f) => f.req);
-    if (target && !newValues[target.id]) newValues[target.id] = txt;
-    else if (target) newValues[target.id] = (newValues[target.id] + " " + txt).trim();
-    setValues(newValues);
+    if (!txt) return;
+    if (!navigator.onLine) {
+      // Offline fallback: dump into first textarea
+      const target = activeCat.fields.find((f) => f.type === "textarea") ?? activeCat.fields.find((f) => f.req);
+      if (target) setValues((prev) => ({ ...prev, [target.id]: ((prev[target.id] ?? "") + " " + txt).trim() }));
+      toast({ title: "Çevrimdışı", description: "Ham metin yerleştirildi, AI parse atlandı." });
+      return;
+    }
+    setParsing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("voice_to_workorder", {
+        body: { transcript: txt, category: cat },
+      });
+      if (error) throw error;
+      const errMsg = (data as any)?.error;
+      if (errMsg) throw new Error(errMsg);
+      const parsed = (data as any)?.values ?? {};
+      setValues((prev) => {
+        const next = { ...prev };
+        for (const f of activeCat.fields) {
+          const v = parsed[f.id];
+          if (typeof v === "string" && v.trim()) next[f.id] = v.trim();
+        }
+        return next;
+      });
+      toast({ title: "✓ AI alanları doldurdu", description: `${Object.keys(parsed).length} alan yerleştirildi` });
+    } catch (e: any) {
+      // Heuristic fallback
+      const target = activeCat.fields.find((f) => f.type === "textarea") ?? activeCat.fields.find((f) => f.req);
+      if (target) setValues((prev) => ({ ...prev, [target.id]: ((prev[target.id] ?? "") + " " + txt).trim() }));
+      toast({ title: "AI parse başarısız", description: e?.message ?? "Ham metin yerleştirildi", variant: "destructive" });
+    } finally {
+      setParsing(false);
+    }
+  };
+
+  // Video → SOP upload
+  const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !wo) return;
+    if (file.size > 50 * 1024 * 1024) {
+      toast({ title: "Dosya çok büyük", description: "En fazla 50MB.", variant: "destructive" });
+      return;
+    }
+    setVideoUploading(true);
+    setVideoStatus("Yükleniyor…");
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Giriş gerekli");
+      const ext = (file.name.split(".").pop() || "mp4").toLowerCase();
+      const path = `${user.id}/${wo.id}/${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage.from("repair-videos").upload(path, file, {
+        contentType: file.type || "video/mp4",
+        upsert: false,
+      });
+      if (upErr) throw upErr;
+      const { data: vRow, error: insErr } = await supabase.from("repair_videos").insert({
+        wo_id: wo.id,
+        machine_id: wo.machine_id,
+        storage_path: path,
+        status: "uploaded",
+        region: profile?.region ?? null,
+        created_by: user.id,
+      }).select("id").maybeSingle();
+      if (insErr) throw insErr;
+
+      setVideoStatus("AI işliyor…");
+      const { error: fnErr } = await supabase.functions.invoke("video_to_sop", {
+        body: {
+          video_id: vRow?.id,
+          wo_context: `${wo.code} · ${wo.machines?.name ?? ""} · ${wo.alarm_code ?? ""}`,
+        },
+      });
+      if (fnErr) throw fnErr;
+      setVideoStatus("✓ SOP hazır");
+      toast({ title: "✓ Video → SOP hazır", description: "Adımlar iş emrine eklendi" });
+    } catch (err: any) {
+      setVideoStatus("");
+      toast({ title: "Video hata", description: err?.message ?? "Yükleme başarısız", variant: "destructive" });
+    } finally {
+      setVideoUploading(false);
+    }
   };
 
   const valid = activeCat.fields.every((f) => !f.req || (values[f.id] ?? "").trim().length > 0);
@@ -258,8 +337,37 @@ export default function CloseWO() {
         {transcript && !listening && (
           <div className="mx-5 mb-3 p-3 bg-bg-2 border border-border rounded-lg text-[13px] text-text-2 italic">
             "{transcript}"
+            {parsing && <div className="not-italic mt-1.5 text-primary text-[12px] font-semibold">⚙ Anlatılanı alanlara yerleştiriyorum…</div>}
           </div>
         )}
+
+        {/* Video → SOP capture */}
+        <label className="mx-5 mb-3 w-[calc(100%-40px)] flex items-center gap-3 p-4 border rounded-xl text-left bg-bg-2 border-border cursor-pointer hover:border-primary/40 transition-colors">
+          <div className="w-11 h-11 rounded-full bg-foreground text-background flex items-center justify-center">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+              <rect x="2" y="6" width="14" height="12" rx="2" />
+              <path d="M22 8l-6 4 6 4V8z" />
+            </svg>
+          </div>
+          <div className="flex-1">
+            <div className="text-[15px] font-semibold">
+              {videoUploading ? videoStatus || "İşleniyor…" : "Tamir videosu çek"}
+            </div>
+            <div className="text-[12px] text-text-2 mt-0.5">
+              {videoUploading
+                ? "AI adım adım prosedüre çeviriyor — biraz bekle."
+                : "30-90 sn tamir videosu — AI sahaya SOP üretir (max 50MB)"}
+            </div>
+          </div>
+          <input
+            type="file"
+            accept="video/*"
+            capture="environment"
+            onChange={handleVideoUpload}
+            disabled={videoUploading}
+            className="hidden"
+          />
+        </label>
 
         <div className="px-5 text-center text-[12px] text-text-3 mb-2">veya elle doldur</div>
 

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import type { WorkOrder, Machine, WorkOrderPart } from "@/types/db";
+import type { WorkOrder, Machine, WorkOrderPart, RepairVideo } from "@/types/db";
 import { ChevronLeft } from "@/components/icons";
 
 type Wo = WorkOrder & { machines: Machine };
@@ -24,6 +24,7 @@ export default function JobDetail() {
   const [wo, setWo] = useState<Wo | null>(null);
   const [loading, setLoading] = useState(true);
   const [checked, setChecked] = useState<Record<string, boolean>>({});
+  const [videos, setVideos] = useState<RepairVideo[]>([]);
 
   useEffect(() => {
     if (!id) return;
@@ -34,6 +35,17 @@ export default function JobDetail() {
         .eq("id", id)
         .maybeSingle();
       setWo(data as any);
+      if (data) {
+        const woRow = data as any;
+        const { data: vids } = await supabase
+          .from("repair_videos")
+          .select("*")
+          .or(`wo_id.eq.${woRow.id},machine_id.eq.${woRow.machine_id}`)
+          .eq("status", "ready")
+          .order("created_at", { ascending: false })
+          .limit(5);
+        setVideos((vids ?? []) as any);
+      }
       setLoading(false);
     })();
   }, [id]);
@@ -116,6 +128,25 @@ export default function JobDetail() {
             </div>
           ))}
         </div>
+
+        {/* AI-generated SOPs from past repair videos */}
+        {videos.length > 0 && (
+          <div className="section">
+            <div className="section-title">📹 Video → SOP ({videos.length})</div>
+            <div className="section-sub">Bu ekipmandan AI ile çıkarılmış prosedürler</div>
+            {videos.map((v) => (
+              <div key={v.id} className="py-2.5 border-b border-border last:border-0">
+                <div className="text-[13px] font-semibold mb-1">{v.summary || "Tamir prosedürü"}</div>
+                <div className="text-[11px] text-text-3 mb-1.5">{new Date(v.created_at).toLocaleDateString("tr-TR")} · {v.sop_steps?.length ?? 0} adım</div>
+                <ol className="space-y-1 text-[12.5px] text-text-2 list-decimal list-inside">
+                  {(v.sop_steps ?? []).slice(0, 5).map((s, i) => (
+                    <li key={i}>{s.text}{s.time ? <span className="text-text-3"> · {s.time}</span> : null}</li>
+                  ))}
+                </ol>
+              </div>
+            ))}
+          </div>
+        )}
 
         {closed && (
           <div className="m-5 p-3 bg-primary-bg text-primary text-[13px] rounded-lg text-center font-semibold">

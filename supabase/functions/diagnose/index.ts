@@ -47,12 +47,17 @@ function buildSystemPrompt(
   usta: MasterProfile,
   woContext: string | null,
   corrections: { wrong: string; correct: string; lesson: string }[],
+  activeRules: { wrong: string; correct: string; lesson: string }[],
 ) {
   const month = new Date().getMonth();
   const summer = month >= 5 && month <= 8;
   const corBlock = corrections.length > 0
     ? "\nGEÇMİŞ CORRECTION KAYITLARI (bu bağlamda öğrenilmiş):\n" +
       corrections.map((c) => `- Yanlış: ${c.wrong} → Doğru: ${c.correct} (Ders: ${c.lesson})`).join("\n")
+    : "";
+  const ruleBlock = activeRules.length > 0
+    ? "\n\n═══ ZORUNLU UYULACAK KURALLAR (sahnede öğrenildi, ASLA TEKRARLAMA) ═══\n" +
+      activeRules.map((r, i) => `${i + 1}. YANLIŞ: ${r.wrong}\n   DOĞRU: ${r.correct}\n   DERS: ${r.lesson}`).join("\n\n")
     : "";
 
   return `Sen ToolA — Putzmeister beton pompası teknisyenlerine yardım eden AI asistan.
@@ -64,7 +69,7 @@ ${usta.work_md}
 ═══ USTA KİMLİĞİ (persona.md) ═══
 ${usta.persona_md}
 ${summer && usta.city === "İstanbul" ? "\n⚠ YAZ MEVSİMİ: Soğutucu fan / radyatör peteği kontrolü kritik." : ""}
-${woContext ? "\nİŞ EMRİ BAĞLAMI: " + woContext : ""}${corBlock}
+${woContext ? "\nİŞ EMRİ BAĞLAMI: " + woContext : ""}${corBlock}${ruleBlock}
 
 ═══ GÜVENLİK (asla atlama) ═══
 - Makineyi durdur, LOTO uygula — bom kolu havadayken çalışma
@@ -79,6 +84,7 @@ ${woContext ? "\nİŞ EMRİ BAĞLAMI: " + woContext : ""}${corBlock}
 5. Kaynak belirt: Kılavuz s.X, ${usta.name} notu, N vaka
 6. Emin değilsen söyle (düşük confidence)
 7. Sorun çözüldüyse iş emri kapatmayı öner
+8. **YUKARIDAKİ ÖĞRENİLMİŞ KURALLAR ZORUNLUDUR** — onlara sadık kal
 
 SADECE \`diagnosis_response\` tool_call ile yanıt ver.`;
 }
@@ -187,7 +193,43 @@ Deno.serve(async (req) => {
     }
 
     const usta = await pickUsta(region as string ?? "Marmara", (domain as string) ?? null);
-    const sys = buildSystemPrompt(usta, woContext ?? null, Array.isArray(corrections) ? corrections : []);
+
+    // Fetch active correction_rules for this region; pick scene-matching ones
+    const supa = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    );
+    const qLower = String(question).toLowerCase();
+    const { data: ruleRows } = await supa
+      .from("correction_rules")
+      .select("id, scene_pattern, wrong, correct, lesson, applied_count")
+      .eq("region", region as string ?? "Marmara")
+      .eq("is_active", true)
+      .order("applied_count", { ascending: false })
+      .limit(40);
+    const matched: any[] = [];
+    for (const r of ruleRows ?? []) {
+      const pattern = String(r.scene_pattern ?? "").toLowerCase();
+      const tokens = pattern.split(/[\s,;|]+/).filter((t) => t.length >= 3);
+      const hit = tokens.some((t) => qLower.includes(t));
+      if (hit) matched.push(r);
+      if (matched.length >= 6) break;
+    }
+
+    const sys = buildSystemPrompt(
+      usta,
+      woContext ?? null,
+      Array.isArray(corrections) ? corrections : [],
+      matched.map((r) => ({ wrong: r.wrong, correct: r.correct, lesson: r.lesson })),
+    );
+
+    // Bump applied_count for matched rules (fire & forget)
+    for (const r of matched) {
+      supa.from("correction_rules").update({
+        applied_count: (r.applied_count ?? 0) + 1,
+        last_applied_at: new Date().toISOString(),
+      }).eq("id", r.id).then(() => {});
+    }
 
     const messages: { role: string; content: string }[] = [{ role: "system", content: sys }];
     if (Array.isArray(history)) {

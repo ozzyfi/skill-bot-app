@@ -71,3 +71,31 @@ export interface MasterProfile {
   created_at: string;
   updated_at: string;
 }
+
+export interface CorrectionRule {
+  id: string;
+  master_profile_id: string | null;
+  region: Region;
+  scene_pattern: string;
+  wrong: string;
+  correct: string;
+  lesson: string;
+  is_active: boolean;
+  applied_count: number;
+  created_at: string;
+  last_applied_at: string | null;
+}
+
+export interface RepairVideo {
+  id: string;
+  wo_id: string | null;
+  machine_id: string | null;
+  storage_path: string;
+  duration_sec: number | null;
+  sop_steps: { num: number; text: string; time?: string }[];
+  transcript: string | null;
+  summary: string | null;
+  status: "uploaded" | "processing" | "ready" | "failed";
+  error_msg: string | null;
+  created_at: string;
+}
