@@ -98,6 +98,8 @@ export default function MachineDetail() {
         ))}
       </div>
 
+      <LogAnalyzerPanel machineId={machine.id} region={machine.region} />
+
       <div className="sticky bottom-0 p-3 bg-background border-t border-border flex gap-2">
         <button className="btn-secondary flex-1" onClick={() => navigate("/diagnosis")}>
           Teşhis sor
