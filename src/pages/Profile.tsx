@@ -28,6 +28,22 @@ export default function Profile() {
       });
   }, [tab, profile?.region]);
 
+  useEffect(() => {
+    if (tab !== "kurallar" || !profile?.region) return;
+    setLoadingRules(true);
+    supabase
+      .from("correction_rules")
+      .select("*")
+      .eq("region", profile.region)
+      .eq("is_active", true)
+      .order("applied_count", { ascending: false })
+      .limit(50)
+      .then(({ data }) => {
+        setRules((data ?? []) as any);
+        setLoadingRules(false);
+      });
+  }, [tab, profile?.region]);
+
   return (
     <div>
       <div className="px-5 py-6 border-b border-border">
@@ -37,6 +53,7 @@ export default function Profile() {
       <div className="flex border-b border-border px-5">
         <TabBtn active={tab === "profil"} onClick={() => setTab("profil")}>Profilim</TabBtn>
         <TabBtn active={tab === "usta"} onClick={() => setTab("usta")}>Usta'm</TabBtn>
+        <TabBtn active={tab === "kurallar"} onClick={() => setTab("kurallar")}>Kurallar</TabBtn>
       </div>
 
       {tab === "profil" && (
