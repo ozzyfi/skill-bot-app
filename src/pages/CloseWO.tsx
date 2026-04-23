@@ -337,8 +337,37 @@ export default function CloseWO() {
         {transcript && !listening && (
           <div className="mx-5 mb-3 p-3 bg-bg-2 border border-border rounded-lg text-[13px] text-text-2 italic">
             "{transcript}"
+            {parsing && <div className="not-italic mt-1.5 text-primary text-[12px] font-semibold">⚙ Anlatılanı alanlara yerleştiriyorum…</div>}
           </div>
         )}
+
+        {/* Video → SOP capture */}
+        <label className="mx-5 mb-3 w-[calc(100%-40px)] flex items-center gap-3 p-4 border rounded-xl text-left bg-bg-2 border-border cursor-pointer hover:border-primary/40 transition-colors">
+          <div className="w-11 h-11 rounded-full bg-foreground text-background flex items-center justify-center">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+              <rect x="2" y="6" width="14" height="12" rx="2" />
+              <path d="M22 8l-6 4 6 4V8z" />
+            </svg>
+          </div>
+          <div className="flex-1">
+            <div className="text-[15px] font-semibold">
+              {videoUploading ? videoStatus || "İşleniyor…" : "Tamir videosu çek"}
+            </div>
+            <div className="text-[12px] text-text-2 mt-0.5">
+              {videoUploading
+                ? "AI adım adım prosedüre çeviriyor — biraz bekle."
+                : "30-90 sn tamir videosu — AI sahaya SOP üretir (max 50MB)"}
+            </div>
+          </div>
+          <input
+            type="file"
+            accept="video/*"
+            capture="environment"
+            onChange={handleVideoUpload}
+            disabled={videoUploading}
+            className="hidden"
+          />
+        </label>
 
         <div className="px-5 text-center text-[12px] text-text-3 mb-2">veya elle doldur</div>
 

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import type { WorkOrder, Machine, WorkOrderPart } from "@/types/db";
+import type { WorkOrder, Machine, WorkOrderPart, RepairVideo } from "@/types/db";
 import { ChevronLeft } from "@/components/icons";
 
 type Wo = WorkOrder & { machines: Machine };
