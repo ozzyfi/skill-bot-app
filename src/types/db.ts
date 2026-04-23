@@ -56,3 +56,18 @@ export interface Profile {
   region: Region;
   client: string;
 }
+
+export interface MasterProfile {
+  id: string;
+  name: string;
+  region: Region;
+  domain: string;
+  experience_years: number;
+  city: string;
+  work_md: string;
+  persona_md: string;
+  is_active: boolean;
+  version: number;
+  created_at: string;
+  updated_at: string;
+}

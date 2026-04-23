@@ -5,7 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { ChevronLeft } from "@/components/icons";
 import { toast } from "@/hooks/use-toast";
 
-type Step = { num: number; text: string; ref?: string; expected?: string };
+type Step = { num: number; text: string; ref?: string; expected?: string; source_ref?: string; confidence?: number };
 type Source = { tag: string; name: string; page?: string };
 type Correction = { scene: string; wrong: string; correct: string; lesson: string };
 type DiagResult = {
@@ -229,10 +229,32 @@ function AssistantBubble({
             {r.steps.map((s) => (
               <div key={s.num} className="flex gap-3 bg-background border border-border rounded-lg p-2.5">
                 <div className="w-6 h-6 rounded-full bg-primary-bg text-primary text-[13px] font-bold flex items-center justify-center flex-shrink-0">{s.num}</div>
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
                   <div className="text-[14px] leading-snug">{s.text}</div>
                   {s.ref && <div className="text-[11px] text-text-3 mt-0.5">{s.ref}</div>}
                   {s.expected && <div className="text-[11px] text-primary mt-0.5">Beklenen: {s.expected}</div>}
+                  {(s.source_ref || typeof s.confidence === "number") && (
+                    <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                      {s.source_ref && (
+                        <span className="inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded bg-primary-bg text-primary border border-primary/20">
+                          📖 {s.source_ref}
+                        </span>
+                      )}
+                      {typeof s.confidence === "number" && (
+                        <span
+                          className={`inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+                            s.confidence >= 80
+                              ? "bg-primary-bg text-primary border-primary/20"
+                              : s.confidence >= 50
+                              ? "bg-warn-bg text-warn border-warn/20"
+                              : "bg-destructive-bg text-destructive border-destructive/20"
+                          }`}
+                        >
+                          %{s.confidence}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
