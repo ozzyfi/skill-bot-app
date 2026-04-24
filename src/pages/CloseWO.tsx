@@ -298,22 +298,22 @@ export default function CloseWO() {
   return (
     <div className="flex flex-col h-full relative">
       {/* Topbar */}
-      <div className="grid grid-cols-[80px_1fr_80px] items-center px-5 py-3.5 border-b border-border min-h-[56px] bg-background flex-shrink-0">
-        <button onClick={() => navigate(-1)} className="flex items-center gap-1.5 text-[15px] font-medium text-text-2 -ml-1 py-2">
+      <div className="topbar">
+        <button className="topbar-back" onClick={() => navigate(-1)}>
           <ChevronLeft /> Geri
         </button>
-        <div className="text-[17px] font-semibold tracking-tight text-center">İş emrini kapat</div>
-        <div className="text-right text-[12px] text-text-3 font-medium">{wo.code}</div>
+        <div className="topbar-title">İş emrini kapat</div>
+        <div className="topbar-action">{wo.code}</div>
       </div>
 
       <div className="flex-1 overflow-y-auto">
         {/* Context row */}
-        <div className="px-5 py-3 bg-bg-2 text-[13px] text-text-2 flex flex-wrap gap-x-2 gap-y-1 border-b border-border">
-          <span>Makine <strong className="text-foreground">{wo.machines.name}</strong></span>
-          <span className="self-center w-[3px] h-[3px] rounded-full bg-text-3" />
+        <div className="context-row">
+          <span>Makine <strong>{wo.machines.name}</strong></span>
+          <span className="dot self-center" />
           <span>{wo.machines.district}, {wo.machines.city}</span>
-          <span className="self-center w-[3px] h-[3px] rounded-full bg-text-3" />
-          <span>Teknisyen <strong className="text-foreground">{profile?.full_name?.split(" ")[0] ?? "—"}</strong></span>
+          <span className="dot self-center" />
+          <span>Teknisyen <strong>{profile?.full_name?.split(" ")[0] ?? "—"}</strong></span>
         </div>
 
         {pendingCount > 0 && (
