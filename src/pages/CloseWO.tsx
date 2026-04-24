@@ -6,6 +6,8 @@ import { useSyncQueue, enqueue, flushQueue } from "@/hooks/useSyncQueue";
 import { ChevronLeft } from "@/components/icons";
 import { toast } from "@/hooks/use-toast";
 import type { WorkOrder, Machine } from "@/types/db";
+import VoiceListenOverlay from "@/components/VoiceListenOverlay";
+import SuccessModal from "@/components/SuccessModal";
 
 type Cat = "ariza" | "bakim" | "parca" | "diger";
 type Field = { id: string; label: string; req: boolean; type: "input" | "textarea"; placeholder: string };
@@ -60,11 +62,13 @@ export default function CloseWO() {
   const [wo, setWo] = useState<Wo | null>(null);
   const [cat, setCat] = useState<Cat>("ariza");
   const [values, setValues] = useState<Record<string, string>>({});
+  const [aiFilled, setAiFilled] = useState<Set<string>>(new Set());
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [listening, setListening] = useState(false);
   const [parsing, setParsing] = useState(false);
   const [transcript, setTranscript] = useState("");
+  const [voiceFilled, setVoiceFilled] = useState(false);
   const [videoUploading, setVideoUploading] = useState(false);
   const [videoStatus, setVideoStatus] = useState<string>("");
   const recRef = useRef<any>(null);
@@ -79,15 +83,24 @@ export default function CloseWO() {
 
   const activeCat = useMemo(() => CATEGORIES.find((c) => c.id === cat)!, [cat]);
 
-  const setVal = (k: string, v: string) => setValues((prev) => ({ ...prev, [k]: v }));
+  const setVal = (k: string, v: string) => {
+    setValues((prev) => ({ ...prev, [k]: v }));
+    // user editing clears the AI-filled flag for that field
+    setAiFilled((prev) => {
+      if (!prev.has(k)) return prev;
+      const next = new Set(prev);
+      next.delete(k);
+      return next;
+    });
+  };
 
-  // Web Speech API — Turkish voice fill
+  // ===== Web Speech API — Turkish voice fill (mantık aynı) =====
   const startListening = () => {
     setTranscript("");
     setListening(true);
     const SR: any = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SR) {
-      // Demo fallback
+      // Demo fallback — eski davranış korunur
       setTimeout(() => {
         const sample = activeCat.voiceSample;
         setTranscript(sample);
@@ -130,14 +143,24 @@ export default function CloseWO() {
     setListening(false);
   };
 
-  // AI-powered autofill: send transcript to voice_to_workorder edge function
+  const cancelListening = () => {
+    try { recRef.current?.stop(); } catch {}
+    setListening(false);
+    setTranscript("");
+    setParsing(false);
+  };
+
+  // AI-powered autofill — voice_to_workorder edge function (DEĞİŞMEDİ)
   const autofillFromTranscript = async (text: string) => {
     const txt = text.trim();
     if (!txt) return;
     if (!navigator.onLine) {
-      // Offline fallback: dump into first textarea
       const target = activeCat.fields.find((f) => f.type === "textarea") ?? activeCat.fields.find((f) => f.req);
-      if (target) setValues((prev) => ({ ...prev, [target.id]: ((prev[target.id] ?? "") + " " + txt).trim() }));
+      if (target) {
+        setValues((prev) => ({ ...prev, [target.id]: ((prev[target.id] ?? "") + " " + txt).trim() }));
+        setAiFilled((prev) => new Set(prev).add(target.id));
+      }
+      setVoiceFilled(true);
       toast({ title: "Çevrimdışı", description: "Ham metin yerleştirildi, AI parse atlandı." });
       return;
     }
@@ -150,26 +173,35 @@ export default function CloseWO() {
       const errMsg = (data as any)?.error;
       if (errMsg) throw new Error(errMsg);
       const parsed = (data as any)?.values ?? {};
+      const filledIds = new Set<string>();
       setValues((prev) => {
         const next = { ...prev };
         for (const f of activeCat.fields) {
           const v = parsed[f.id];
-          if (typeof v === "string" && v.trim()) next[f.id] = v.trim();
+          if (typeof v === "string" && v.trim()) {
+            next[f.id] = v.trim();
+            filledIds.add(f.id);
+          }
         }
         return next;
       });
-      toast({ title: "✓ AI alanları doldurdu", description: `${Object.keys(parsed).length} alan yerleştirildi` });
+      setAiFilled((prev) => new Set([...prev, ...filledIds]));
+      setVoiceFilled(true);
+      toast({ title: "✓ AI alanları doldurdu", description: `${filledIds.size} alan yerleştirildi` });
     } catch (e: any) {
-      // Heuristic fallback
       const target = activeCat.fields.find((f) => f.type === "textarea") ?? activeCat.fields.find((f) => f.req);
-      if (target) setValues((prev) => ({ ...prev, [target.id]: ((prev[target.id] ?? "") + " " + txt).trim() }));
+      if (target) {
+        setValues((prev) => ({ ...prev, [target.id]: ((prev[target.id] ?? "") + " " + txt).trim() }));
+        setAiFilled((prev) => new Set(prev).add(target.id));
+      }
+      setVoiceFilled(true);
       toast({ title: "AI parse başarısız", description: e?.message ?? "Ham metin yerleştirildi", variant: "destructive" });
     } finally {
       setParsing(false);
     }
   };
 
-  // Video → SOP upload
+  // Video → SOP upload (DEĞİŞMEDİ)
   const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = "";
@@ -251,7 +283,6 @@ export default function CloseWO() {
       await supabase.from("learning_cases").insert({ ...learning, created_by: user?.id ?? null });
       setSuccess(true);
     } catch (e: any) {
-      // Fall back to queue
       enqueue({ kind: "close_wo", payload: { woId: wo.id, closing_notes, learning } });
       setSuccess(true);
       toast({ title: "Sıraya alındı", description: "Sunucu hatası — bağlantı geri geldiğinde gönderilecek." });
@@ -262,36 +293,25 @@ export default function CloseWO() {
 
   if (!wo) return <div className="p-8 text-center text-text-3">Yükleniyor...</div>;
 
-  if (success) {
-    return (
-      <div className="p-8 text-center flex flex-col items-center justify-center h-full">
-        <div className="w-16 h-16 rounded-full bg-primary-bg text-primary flex items-center justify-center text-3xl mb-4">✓</div>
-        <div className="text-[20px] font-bold mb-1">İş emri kapatıldı</div>
-        <div className="text-[14px] text-text-2 mb-6">{wo.code} · {wo.machines.name}</div>
-        <button className="btn-primary w-full max-w-[260px]" onClick={() => navigate("/")}>Ana sayfaya dön</button>
-      </div>
-    );
-  }
-
   const pendingCount = queue.filter((q) => q.status !== "synced").length;
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
+    <div className="flex flex-col h-full relative">
+      {/* Topbar */}
       <div className="grid grid-cols-[80px_1fr_80px] items-center px-5 py-3.5 border-b border-border min-h-[56px] bg-background flex-shrink-0">
         <button onClick={() => navigate(-1)} className="flex items-center gap-1.5 text-[15px] font-medium text-text-2 -ml-1 py-2">
           <ChevronLeft /> Geri
         </button>
         <div className="text-[17px] font-semibold tracking-tight text-center">İş emrini kapat</div>
-        <div />
+        <div className="text-right text-[12px] text-text-3 font-medium">{wo.code}</div>
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        {/* Context */}
-        <div className="px-5 py-3 bg-bg-2 text-[12px] text-text-2 flex flex-wrap gap-x-2 gap-y-1 border-b border-border">
-          <span>İş <strong className="text-foreground">{wo.code}</strong></span>
-          <span className="self-center w-[3px] h-[3px] rounded-full bg-text-3" />
+        {/* Context row */}
+        <div className="px-5 py-3 bg-bg-2 text-[13px] text-text-2 flex flex-wrap gap-x-2 gap-y-1 border-b border-border">
           <span>Makine <strong className="text-foreground">{wo.machines.name}</strong></span>
+          <span className="self-center w-[3px] h-[3px] rounded-full bg-text-3" />
+          <span>{wo.machines.district}, {wo.machines.city}</span>
           <span className="self-center w-[3px] h-[3px] rounded-full bg-text-3" />
           <span>Teknisyen <strong className="text-foreground">{profile?.full_name?.split(" ")[0] ?? "—"}</strong></span>
         </div>
@@ -304,46 +324,52 @@ export default function CloseWO() {
         )}
 
         {/* Category chips */}
-        <div className="px-5 py-3 flex gap-2 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
+        <div className="cat-chips">
           {CATEGORIES.map((c) => (
             <button
               key={c.id}
-              onClick={() => { setCat(c.id); setValues({}); }}
-              className={`region-chip ${cat === c.id ? "active" : ""}`}
+              onClick={() => { setCat(c.id); setValues({}); setAiFilled(new Set()); setVoiceFilled(false); setTranscript(""); }}
+              className={`cat ${cat === c.id ? "active" : ""}`}
             >
               {c.label}
             </button>
           ))}
         </div>
 
-        {/* Voice call */}
+        {/* Voice call CTA */}
         <button
-          onClick={listening ? stopListening : startListening}
-          className={`mx-5 mb-3 w-[calc(100%-40px)] flex items-center gap-3 p-4 border rounded-xl text-left ${listening ? "bg-destructive-bg border-destructive" : "bg-primary-bg border-primary/20"}`}
+          onClick={voiceFilled ? undefined : startListening}
+          className={`voice-call ${voiceFilled ? "filled" : ""}`}
+          disabled={voiceFilled || listening}
         >
-          <div className={`w-11 h-11 rounded-full flex items-center justify-center ${listening ? "bg-destructive text-white animate-pulse" : "bg-primary text-white"}`}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" /><line x1="12" y1="19" x2="12" y2="23" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" /></svg>
+          <div className="voice-mic-sm">
+            {voiceFilled ? (
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            ) : (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+                <line x1="12" y1="19" x2="12" y2="23" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+              </svg>
+            )}
           </div>
           <div className="flex-1">
-            <div className={`text-[15px] font-semibold ${listening ? "text-destructive" : "text-primary"}`}>
-              {listening ? "Dinleniyor… (durdurmak için dokun)" : "Mikrofona anlat"}
+            <div className={`text-[15px] font-semibold ${voiceFilled ? "text-text-2" : "text-foreground"}`}>
+              {voiceFilled ? "AI doldurdu — istersen düzenle" : "Sesle anlat — formu otomatik dolduralım"}
             </div>
-            <div className="text-[12px] text-text-2 mt-0.5">
-              {listening ? (transcript || "Konuşmaya başla…") : "Türkçe (tr-TR) — alanları senin yerine doldurayım"}
+            <div className="text-[13px] text-text-2 mt-0.5">
+              {voiceFilled
+                ? "Aşağıdaki yeşil alanlar AI tarafından dolduruldu"
+                : "Türkçe (tr-TR) — kategori seçtikten sonra konuş"}
             </div>
           </div>
         </button>
 
-        {transcript && !listening && (
-          <div className="mx-5 mb-3 p-3 bg-bg-2 border border-border rounded-lg text-[13px] text-text-2 italic">
-            "{transcript}"
-            {parsing && <div className="not-italic mt-1.5 text-primary text-[12px] font-semibold">⚙ Anlatılanı alanlara yerleştiriyorum…</div>}
-          </div>
-        )}
-
         {/* Video → SOP capture */}
         <label className="mx-5 mb-3 w-[calc(100%-40px)] flex items-center gap-3 p-4 border rounded-xl text-left bg-bg-2 border-border cursor-pointer hover:border-primary/40 transition-colors">
-          <div className="w-11 h-11 rounded-full bg-foreground text-background flex items-center justify-center">
+          <div className="w-11 h-11 rounded-full bg-foreground text-background flex items-center justify-center flex-shrink-0">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
               <rect x="2" y="6" width="14" height="12" rx="2" />
               <path d="M22 8l-6 4 6 4V8z" />
@@ -369,47 +395,70 @@ export default function CloseWO() {
           />
         </label>
 
-        <div className="px-5 text-center text-[12px] text-text-3 mb-2">veya elle doldur</div>
+        <div className="px-5 text-center text-[13px] text-text-3 mb-3">veya elle doldur</div>
 
-        {/* Form */}
-        <div className="px-5 pb-4 space-y-3">
-          {activeCat.fields.map((f) => (
-            <div key={f.id}>
-              <label className="block text-[12px] font-semibold text-text-2 mb-1.5">
-                {f.label} {f.req && <span className="text-destructive">*</span>}
-              </label>
-              {f.type === "textarea" ? (
-                <textarea
-                  value={values[f.id] ?? ""}
-                  onChange={(e) => setVal(f.id, e.target.value)}
-                  placeholder={f.placeholder}
-                  rows={3}
-                  className="w-full bg-bg-2 border border-border rounded-lg px-3 py-2.5 text-[14px] outline-none focus:border-primary focus:bg-background resize-none"
-                />
-              ) : (
-                <input
-                  value={values[f.id] ?? ""}
-                  onChange={(e) => setVal(f.id, e.target.value)}
-                  placeholder={f.placeholder}
-                  className="w-full bg-bg-2 border border-border rounded-lg px-3 py-2.5 text-[14px] outline-none focus:border-primary focus:bg-background"
-                />
-              )}
-            </div>
-          ))}
+        {/* Form fields */}
+        <div>
+          {activeCat.fields.map((f) => {
+            const filled = aiFilled.has(f.id);
+            return (
+              <div key={f.id} className={`field-block ${filled ? "filled" : ""}`}>
+                <label className="field-label flex justify-between text-[13px] font-semibold text-text-2 mb-2">
+                  <span>{f.label} {f.req && <span className="text-destructive">*</span>}</span>
+                  {filled && <span className="ai-fill">✓ AI doldurdu</span>}
+                </label>
+                {f.type === "textarea" ? (
+                  <textarea
+                    value={values[f.id] ?? ""}
+                    onChange={(e) => setVal(f.id, e.target.value)}
+                    placeholder={f.placeholder}
+                    rows={3}
+                    className="field-area w-full bg-bg-2 border border-border rounded-[10px] px-3.5 py-3 text-[15px] outline-none focus:border-primary focus:bg-background resize-none"
+                  />
+                ) : (
+                  <input
+                    value={values[f.id] ?? ""}
+                    onChange={(e) => setVal(f.id, e.target.value)}
+                    placeholder={f.placeholder}
+                    className="field-input w-full bg-bg-2 border border-border rounded-[10px] px-3.5 py-3 text-[15px] outline-none focus:border-primary focus:bg-background"
+                  />
+                )}
+              </div>
+            );
+          })}
         </div>
 
-        {/* SAP/Maximo placeholder */}
-        <div className="mx-5 mb-4 p-3 bg-bg-2 border border-dashed border-border rounded-lg text-[12px] text-text-3 leading-relaxed">
+        <div className="mx-5 mb-4 mt-4 p-3 bg-bg-2 border border-dashed border-border rounded-lg text-[12px] text-text-3 leading-relaxed">
           <strong className="text-text-2">SAP / Maximo entegrasyonu</strong> — Onayladığında bu kayıt SAP iş emri kapanışına ve Maximo varlık geçmişine otomatik gönderilecek. (Entegrasyon bağlantısı pasif.)
         </div>
       </div>
 
-      {/* Bottom */}
-      <div className="border-t border-border bg-background p-3 flex-shrink-0">
-        <button onClick={submit} disabled={!valid || submitting} className="btn-primary w-full disabled:opacity-50">
-          {submitting ? "Gönderiliyor…" : navigator.onLine ? "✓ Onayla ve gönder" : "✓ Çevrimdışı kaydet"}
+      {/* Bottom bar */}
+      <div className="border-t border-border bg-background p-3 flex gap-2 flex-shrink-0">
+        <button className="btn-secondary" onClick={() => navigate(-1)}>Taslak</button>
+        <button onClick={submit} disabled={!valid || submitting} className="btn-primary flex-1 disabled:opacity-50">
+          {submitting ? "Gönderiliyor…" : navigator.onLine ? "✓ İş Emrini Kapat" : "✓ Çevrimdışı kaydet"}
         </button>
       </div>
+
+      {/* Listen overlay */}
+      <VoiceListenOverlay
+        open={listening || (parsing && !!transcript)}
+        transcript={transcript}
+        parsing={parsing}
+        onStop={stopListening}
+        onCancel={cancelListening}
+      />
+
+      {/* Success modal */}
+      <SuccessModal
+        open={success}
+        title="İş emri kapatıldı"
+        sub={`${wo.machines.name} • Saha öğrenmesine eklendi`}
+        idLabel={wo.code}
+        ctaLabel="Ana sayfaya dön"
+        onCta={() => navigate("/")}
+      />
     </div>
   );
 }
