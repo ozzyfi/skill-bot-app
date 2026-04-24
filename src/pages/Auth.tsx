@@ -56,6 +56,22 @@ export default function AuthPage() {
           <div className="text-sm text-text-2 mt-1">Putzmeister · Saha Bakım Asistanı</div>
         </div>
 
+        <button
+          type="button"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true); setErr(null);
+            const { error } = await supabase.auth.signInWithPassword({
+              email: "ozgur@toola.net", password: "ozgur123",
+            });
+            if (error) { setErr(error.message); setBusy(false); }
+            else navigate("/");
+          }}
+          className="w-full mb-4 py-3 rounded-[10px] border-2 border-dashed border-primary/40 bg-primary/5 text-primary font-semibold text-sm hover:bg-primary/10 transition disabled:opacity-60"
+        >
+          🚀 Demo olarak gir (ozgur@toola.net)
+        </button>
+
         <div className="flex gap-2 mb-6 p-1 bg-bg-2 rounded-lg">
           {(["signin", "signup"] as const).map((m) => (
             <button
