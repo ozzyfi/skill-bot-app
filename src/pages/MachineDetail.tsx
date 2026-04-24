@@ -2,12 +2,34 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import type { Machine, Technician } from "@/types/db";
-import { ChevronLeft, Pin, Clock, Alert } from "@/components/icons";
 import LogAnalyzerPanel from "@/components/LogAnalyzerPanel";
+
+const ChevronLeftIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M15 18l-6-6 6-6"/></svg>
+);
+const PinIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+);
+const ClockIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+);
+const AlertIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+);
+const SparkIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2c.3 0 .56.2.64.49l1.36 5.01 5.01 1.36a.67.67 0 0 1 0 1.28l-5.01 1.36-1.36 5.01a.67.67 0 0 1-1.28 0l-1.36-5.01-5.01-1.36a.67.67 0 0 1 0-1.28l5.01-1.36 1.36-5.01A.67.67 0 0 1 12 2z"/></svg>
+);
 
 const RISK_DEFAULT = [
   { title: "H-201 arızası tekrar riski", sub: "312 vakadan hesaplandı · Ort. 65 günde bir", pct: "%74", detail: "Tahmini sonraki tekrar: <strong>15 Haziran 2026</strong> (±10 gün)", warn: false },
-  { title: "Yaz şartları uyarısı", sub: "Sıcaklık + yağ viskozitesi", pct: "%41", detail: "Temmuz–Ağustos arası valf gevşemesi vakaları %38 artıyor.", warn: true },
+  { title: "Yaz şartları uyarısı", sub: "Hidrolik yağ ısınması riski artıyor", pct: "%41", detail: "Yaz aylarında <strong>pompa contası ömrü %30 azalıyor</strong> (112 vaka). Soğutucu fan kontrolü önerilir.", warn: true },
+];
+
+const SERVICE_LOG_DEFAULT = [
+  { date: "10 Mart 2026", what: "Yağ filtresi değişimi", dur: "1,5s" },
+  { date: "18 Ocak 2026", what: "Basınç valfi ayarı", dur: "2s" },
+  { date: "4 Kasım 2025", what: "Hidrolik pompa revizyonu", dur: "4s" },
+  { date: "22 Eylül 2025", what: "Rutin bakım", dur: "1s" },
 ];
 
 export default function MachineDetail() {
@@ -33,42 +55,44 @@ export default function MachineDetail() {
 
   return (
     <div>
-      <div className="grid grid-cols-[80px_1fr_80px] items-center px-5 py-3.5 border-b border-border min-h-[56px]">
-        <button onClick={() => navigate(-1)} className="flex items-center gap-1.5 text-[15px] font-medium text-text-2 active:text-foreground -ml-1 py-2">
-          <ChevronLeft /> Geri
+      {/* Topbar */}
+      <div className="topbar">
+        <button className="topbar-back" onClick={() => navigate(-1)}>
+          <ChevronLeftIcon /> Geri
         </button>
-        <div className="text-[17px] font-semibold tracking-tight text-center">Makine</div>
-        <div />
+        <div className="topbar-title">Makine</div>
+        <div className="topbar-action" />
       </div>
 
       {usta && (
-        <div className="mx-5 mb-3 px-3 py-2 bg-primary-bg rounded-lg text-xs text-primary font-semibold flex items-center gap-1.5">
+        <div className="mx-5 mt-3 px-3 py-2 bg-primary-bg rounded-lg text-xs text-primary font-semibold flex items-center gap-1.5">
           <span className="text-base">👤</span>
-          <span>
-            {usta.full_name} · {usta.experience_years} yıl · {usta.city}
-          </span>
+          <span>{usta.full_name} · {usta.experience_years} yıl · {usta.city}</span>
         </div>
       )}
 
-      <div className="px-5 pt-1 pb-4 border-b border-border">
-        <div className="text-[22px] font-bold tracking-tight leading-tight mb-2">{machine.name}</div>
-        <div className="flex items-center gap-1 text-sm text-text-2 mb-2.5">
-          <Pin />
+      {/* Machine detail top */}
+      <div className="machine-detail-top">
+        <div className="machine-detail-name">{machine.name}</div>
+        <div className="machine-detail-loc">
+          <PinIcon />
           <span>{machine.district}, {machine.city}</span>
         </div>
-        <div className="flex gap-2 flex-wrap">
-          {machine.status !== "ok" && (
-            <span className={`ms-badge ${machine.status}`}>
+        <div className="machine-detail-status-row">
+          {machine.status === "ok" ? (
+            <div className="machine-status ok">Çalışıyor</div>
+          ) : (
+            <div className={`machine-status ${machine.status}`}>
               {machine.status === "fault" ? "Arıza" : machine.status === "busy" ? "Atandı" : "Bakımda"}
-            </span>
+            </div>
           )}
-          {machine.status === "ok" && <span className="ms-badge ok">Çalışıyor</span>}
         </div>
       </div>
 
-      <div className="section">
-        <div className="section-title">Makine Bilgileri</div>
-        <div className="grid grid-cols-2 gap-x-4 gap-y-2.5">
+      {/* Spec */}
+      <div className="machine-spec">
+        <div className="machine-spec-title">Makine Bilgileri</div>
+        <div className="spec-grid">
           <Spec k="Model" v={machine.model} />
           <Spec k="Seri No" v={machine.serial_no ?? "-"} />
           <Spec k="Üretim Yılı" v={String(machine.year ?? "-")} />
@@ -78,34 +102,51 @@ export default function MachineDetail() {
         </div>
       </div>
 
+      {/* Risk */}
       <div className="section">
         <div className="section-title">Risk Analizi</div>
         <div className="section-sub">Saha vakalarına göre tahmin</div>
         {RISK_DEFAULT.map((r, i) => (
           <div key={i} className="risk-card">
-            <div className="flex items-center gap-2.5 mb-2">
+            <div className="risk-head">
               <div className={`risk-icon ${r.warn ? "warn" : ""}`}>
-                {r.warn ? <Alert /> : <Clock />}
+                {r.warn ? <AlertIcon /> : <ClockIcon />}
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-semibold leading-tight">{r.title}</div>
-                <div className="text-xs text-text-3 mt-0.5">{r.sub}</div>
+              <div className="risk-body">
+                <div className="risk-title">{r.title}</div>
+                <div className="risk-sub">{r.sub}</div>
               </div>
-              <div className="text-xl font-bold text-primary tracking-tight">{r.pct}</div>
+              <div className="risk-pct">{r.pct}</div>
             </div>
-            <div className="text-[13px] text-text-2 leading-snug pt-2 border-t border-dashed border-border" dangerouslySetInnerHTML={{ __html: r.detail }} />
+            <div className="risk-detail" dangerouslySetInnerHTML={{ __html: r.detail }} />
           </div>
         ))}
       </div>
 
+      {/* Service history */}
+      <div className="section">
+        <div className="section-title">Servis Geçmişi</div>
+        <div className="section-sub">Son işlemler</div>
+        {SERVICE_LOG_DEFAULT.map((l, i) => (
+          <div key={i} className="log">
+            <div className="log-date">{l.date}</div>
+            <div className="log-what">{l.what}</div>
+            <div className="log-dur">{l.dur}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Log analyzer (gerçek backend bağlantısı) */}
       <LogAnalyzerPanel machineId={machine.id} region={machine.region} />
 
-      <div className="sticky bottom-0 p-3 bg-background border-t border-border flex gap-2">
-        <button className="btn-secondary flex-1" onClick={() => navigate("/diagnosis")}>
-          Teşhis sor
+      {/* Machine actions */}
+      <div className="machine-actions">
+        <button className="btn btn-secondary" onClick={() => navigate("/diagnosis", { state: { question: `${machine.name} için sor` } })}>
+          <SparkIcon />
+          Bu makine için sor
         </button>
-        <button className="btn-primary flex-1" onClick={() => navigate("/")}>
-          İşlere dön
+        <button className="btn btn-primary" onClick={() => navigate("/")}>
+          İş bildir
         </button>
       </div>
     </div>
@@ -113,9 +154,9 @@ export default function MachineDetail() {
 }
 
 const Spec = ({ k, v }: { k: string; v: string }) => (
-  <div className="flex flex-col gap-0.5">
-    <span className="text-xs text-text-3">{k}</span>
-    <span className="text-sm font-semibold">{v}</span>
+  <div className="spec-item">
+    <span className="k">{k}</span>
+    <span className="v">{v}</span>
   </div>
 );
 
